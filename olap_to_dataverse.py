@@ -10,6 +10,7 @@ This replaces the Excel COM automation approach.
 Uses Azure Key Vault for secure credential management.
 
 Auto-deployed via GitHub Actions + Watchtower.
+Test deployment: 2025-11-25 18:57
 """
 
 import os
