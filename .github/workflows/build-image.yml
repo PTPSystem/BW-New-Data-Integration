@@ -36,6 +36,19 @@ jobs:
       id: lowercase
       run: echo "owner=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
+    - name: Generate version number
+      id: version
+      run: |
+        # Get short SHA (first 7 chars)
+        SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
+        
+        # Get run number (auto-increments with each workflow run)
+        VERSION="v1.0.${{ github.run_number }}"
+        
+        echo "version=${VERSION}" >> $GITHUB_OUTPUT
+        echo "short_sha=${SHORT_SHA}" >> $GITHUB_OUTPUT
+        echo "Generated version: ${VERSION} (${SHORT_SHA})"
+
     - name: Build and push Docker image
       uses: docker/build-push-action@v5
       with:
@@ -44,11 +57,18 @@ jobs:
         push: true
         tags: |
           ghcr.io/${{ steps.lowercase.outputs.owner }}/beachwood-integration:latest
-          ghcr.io/${{ steps.lowercase.outputs.owner }}/beachwood-integration:${{ github.sha }}
+          ghcr.io/${{ steps.lowercase.outputs.owner }}/beachwood-integration:${{ steps.version.outputs.version }}
+          ghcr.io/${{ steps.lowercase.outputs.owner }}/beachwood-integration:${{ steps.version.outputs.short_sha }}
+        labels: |
+          org.opencontainers.image.version=${{ steps.version.outputs.version }}
+          org.opencontainers.image.revision=${{ github.sha }}
+          org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
 
     - name: Output image details
       run: |
-        echo "Image pushed to ghcr.io/${{ steps.lowercase.outputs.owner }}/beachwood-integration:latest"
-        echo "SHA tag: ghcr.io/${{ steps.lowercase.outputs.owner }}/beachwood-integration:${{ github.sha }}"
+        echo "🎉 Image pushed successfully!"
+        echo "📦 Latest: ghcr.io/${{ steps.lowercase.outputs.owner }}/beachwood-integration:latest"
+        echo "🏷️  Version: ghcr.io/${{ steps.lowercase.outputs.owner }}/beachwood-integration:${{ steps.version.outputs.version }}"
+        echo "🔖 SHA: ghcr.io/${{ steps.lowercase.outputs.owner }}/beachwood-integration:${{ steps.version.outputs.short_sha }}"
