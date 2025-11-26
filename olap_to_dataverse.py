@@ -8,6 +8,8 @@ This script:
 
 This replaces the Excel COM automation approach.
 Uses Azure Key Vault for secure credential management.
+
+Auto-deployed via GitHub Actions + Watchtower.
 """
 
 import os
