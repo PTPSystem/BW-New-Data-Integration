@@ -2,11 +2,12 @@ version: '3.8'
 
 services:
   beachwood-olap-sync:
-    image: beachwood-integration:latest
-    pull_policy: never
+    image: ghcr.io/ptpsystem/beachwood-integration:latest
     container_name: beachwood-olap-sync
     restart: unless-stopped
     command: ["tail", "-f", "/dev/null"]
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
 
     # Environment variables for Azure Key Vault access
     environment:
@@ -66,7 +67,7 @@ services:
         max-size: "10m"
         max-file: "3"
 
-  # Optional: Watchtower for automatic updates
+  # Watchtower for automatic updates from GitHub
   watchtower:
     image: containrrr/watchtower
     container_name: beachwood-watchtower
@@ -74,11 +75,18 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - WATCHTOWER_CLEANUP=true
-      - WATCHTOWER_POLL_INTERVAL=86400  # Check daily
-      - WATCHTOWER_INCLUDE_STOPPED=true
+      - WATCHTOWER_POLL_INTERVAL=300  # Check every 5 minutes
+      - WATCHTOWER_LABEL_ENABLE=true  # Only update containers with watchtower label
+      - WATCHTOWER_INCLUDE_RESTARTING=true
+      - WATCHTOWER_ROLLING_RESTART=true
+      - WATCHTOWER_NO_STARTUP_MESSAGE=false
+      - WATCHTOWER_NOTIFICATIONS=log
     restart: unless-stopped
-    profiles:
-      - watchtower
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 networks:
   beachwood-network:
