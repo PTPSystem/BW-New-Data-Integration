@@ -1,0 +1,164 @@
+# Portainer Stack Configuration for Beachwood Data Integration
+
+This docker-compose.yml is optimized for deployment via Portainer on TrueNAS.
+
+## PostgreSQL Access from Container
+
+**Yes, containers can access TrueNAS PostgreSQL!** Here are the networking options:
+
+### Option 1: Host Networking (Recommended for PostgreSQL Access)
+Use `network_mode: host` to give the container direct access to host services:
+
+```yaml
+services:
+  beachwood-olap-sync:
+    # ... other config ...
+    network_mode: host  # Direct access to host network
+```
+
+**Pros**: Direct access to all host services including PostgreSQL
+**Cons**: Less network isolation
+
+### Option 2: Host Gateway Access
+Use the Docker host gateway IP (usually 172.17.0.1):
+
+```yaml
+services:
+  beachwood-olap-sync:
+    # ... other config ...
+    extra_hosts:
+      - "truenas-host:172.17.0.1"  # Or use actual TrueNAS IP
+```
+
+Then connect to: `postgresql://user:pass@truenas-host:5432/database`
+
+### Option 3: Custom Network with Host Access
+Create a network that allows host access.
+
+## Deployment in Portainer
+
+1. **Access Portainer** on your TrueNAS system
+2. **Go to Stacks** → **Add Stack**
+3. **Name**: `beachwood-integration`
+4. **Copy and paste** the docker-compose.yml content below
+5. **Set Environment Variables**:
+   - `AZURE_TENANT_ID`: c8b6ba98-3fc0-4153-83a9-01374492c0f5
+   - `AZURE_CLIENT_ID`: d056223e-f0de-4b16-b4e0-fec2a24109ff
+   - `AZURE_CLIENT_SECRET`: [Get from Azure Key Vault kv-bw-data-integration]
+   - `POSTGRES_HOST`: 172.17.0.1 (or your TrueNAS IP)
+   - `POSTGRES_PORT`: 5432
+6. **Deploy the stack**
+
+## Docker Compose Configuration
+
+```yaml
+version: '3.8'
+
+services:
+  beachwood-olap-sync:
+    image: beachwood-integration:latest
+    container_name: beachwood-olap-sync
+    restart: unless-stopped
+
+    environment:
+      - ENVIRONMENT=production
+      - LOG_LEVEL=INFO
+      - PYTHONUNBUFFERED=1
+      - AZURE_TENANT_ID=${AZURE_TENANT_ID}
+      - AZURE_CLIENT_ID=${AZURE_CLIENT_ID}
+      - AZURE_CLIENT_SECRET=${AZURE_CLIENT_SECRET}
+      # PostgreSQL connection (if needed)
+      - POSTGRES_HOST=${POSTGRES_HOST:-172.17.0.1}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+
+    volumes:
+      - /mnt/truenas/beachwood/logs:/app/logs
+      - /mnt/truenas/beachwood/temp/labor:/tmp/labor
+      - /mnt/truenas/beachwood/temp/doordash:/tmp/doordash
+
+    # Option 1: Host networking for PostgreSQL access
+    network_mode: host
+
+    # Alternative Option 2: Bridge network with host access
+    # networks:
+    #   - beachwood-network
+    # extra_hosts:
+    #   - "truenas-postgres:172.17.0.1"
+
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '2.0'
+        reservations:
+          memory: 1G
+          cpus: '1.0'
+
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# Only needed if not using network_mode: host
+# networks:
+#   beachwood-network:
+#     driver: bridge
+```
+
+## Scheduling Jobs in Portainer
+
+Since Portainer doesn't have built-in cron scheduling, you'll need to:
+
+### Option 1: Use TrueNAS Cron Jobs (Recommended)
+Set up cron jobs in TrueNAS that call the Portainer-deployed container:
+
+```bash
+# Daily incremental sync
+0 2 * * * root docker exec beachwood-olap-sync python olap_to_dataverse.py --query-type last_2_weeks >> /mnt/truenas/beachwood/logs/cron.log 2>&1
+
+# Weekly full sync
+0 3 * * 0 root docker exec beachwood-olap-sync python olap_to_dataverse.py --query-type full_bi_data >> /mnt/truenas/beachwood/logs/cron-full.log 2>&1
+```
+
+### Option 2: Use Portainer's "Duplicate/Edit" for Manual Runs
+- Go to **Containers** in Portainer
+- Find `beachwood-olap-sync`
+- Click **Duplicate/Edit**
+- Change the command to run the sync
+- Save and run manually as needed
+
+### Option 3: External Scheduler
+Use an external cron service or another container to trigger the sync.
+
+## Monitoring in Portainer
+
+- **Container Status**: Check the container is running and healthy
+- **Logs**: View container logs directly in Portainer
+- **Stats**: Monitor CPU/memory usage
+- **Restart Policy**: Set to automatically restart on failure
+
+## Environment Variables
+
+Set these in Portainer Stack environment variables:
+
+| Variable | Value | Source |
+|----------|-------|--------|
+| `AZURE_TENANT_ID` | `c8b6ba98-3fc0-4153-83a9-01374492c0f5` | Fixed |
+| `AZURE_CLIENT_ID` | `d056223e-f0de-4b16-b4e0-fec2a24109ff` | Fixed |
+| `AZURE_CLIENT_SECRET` | `[your-secret]` | Azure Key Vault |
+
+## Volumes
+
+Ensure these TrueNAS paths exist and are accessible:
+- `/mnt/truenas/beachwood/logs`
+- `/mnt/truenas/beachwood/temp/labor`
+- `/mnt/truenas/beachwood/temp/doordash`</content>
+<parameter name="filePath">/Users/howardshen/Library/CloudStorage/OneDrive-Personal/Github/Beachwood-Data-Integration/NewIntegration/truenas/portainer-stack.yml

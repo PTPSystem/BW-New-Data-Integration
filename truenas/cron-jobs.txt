@@ -1,0 +1,19 @@
+# TrueNAS Cron Job Configuration for Beachwood OLAP Sync
+# This runs the OLAP-to-Dataverse sync daily at 2:00 AM
+
+# Cron job command
+# Runs daily at 2:00 AM (TrueNAS time zone)
+# Uses docker-compose to run the sync container
+
+SHELL=/bin/bash
+PATH=/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/sbin:/usr/local/bin
+
+# Daily OLAP sync at 2:00 AM
+0 2 * * * root cd /mnt/truenas/beachwood/integration && docker-compose run --rm beachwood-olap-sync python olap_to_dataverse.py --query-type last_2_weeks >> /mnt/truenas/beachwood/logs/cron.log 2>&1
+
+# Weekly full sync on Sundays at 3:00 AM (for data validation)
+0 3 * * 0 root cd /mnt/truenas/beachwood/integration && docker-compose run --rm beachwood-olap-sync python olap_to_dataverse.py --query-type full_bi_data >> /mnt/truenas/beachwood/logs/cron-full.log 2>&1
+
+# Log rotation (monthly)
+0 0 1 * * root /usr/bin/find /mnt/truenas/beachwood/logs -name "*.log" -mtime +30 -delete</content>
+<parameter name="filePath">/Users/howardshen/Library/CloudStorage/OneDrive-Personal/Github/Beachwood-Data-Integration/NewIntegration/truenas/cron-jobs.txt

@@ -1,0 +1,85 @@
+{
+  "_comment": "Production configuration - all secrets from Azure Key Vault",
+  "environment": "production",
+  
+  "azure": {
+    "key_vault_name": "kv-bw-data-integration",
+    "key_vault_url": "https://kv-bw-data-integration.vault.azure.net/",
+    "app_registration": "ar-bw-data-integration",
+    "app_client_id": "d056223e-f0de-4b16-b4e0-fec2a24109ff",
+    "tenant_id": "c8b6ba98-3fc0-4153-83a9-01374492c0f5"
+  },
+  
+  "logging": {
+    "level": "INFO",
+    "format": "%(asctime)s - %(levelname)s - %(module)s - %(message)s",
+    "structured": true
+  },
+  
+  "olap": {
+    "server": "https://ednacubes.papajohns.com:10502",
+    "catalog": "OARS Franchise",
+    "ssl_verify": false,
+    "timeout_seconds": 300
+  },
+  
+  "dataverse": {
+    "table_names": {
+      "olap_bi_data": "crf63_olapbidatas",
+      "labor_headcount": "crf63_laborheadcounts",
+      "sales_forecast": "crf63_bwsalesforecasts"
+    }
+  },
+  
+  "sharepoint": {
+    "site_name": "IT Project - General",
+    "library_name": "BI Import",
+    "paths": {
+      "bi_dimensions": "BI Import/BI Dimensions.xlsx",
+      "labor_output": "BI Import/labor_time_by_day_part.csv",
+      "doordash_base": "BI Import/DD/DD Detailed.csv",
+      "doordash_archive": "BI Import/DD/Archive",
+      "labor_forecast_export": "Labor Planning/Labor Planning Export/Export",
+      "labor_forecast_archive": "Labor Planning/Labor Planning Export/Archive",
+      "sales_history": [
+        "BI Import/BI At Scale Import.xlsx",
+        "BI Import/BI At Scale Import 2024.xlsx",
+        "BI Import/BI At Scale Import 2023.xlsx"
+      ],
+      "sales_calendar": "BI Import/BI Dimensions.xlsx"
+    }
+  },
+  
+  "labor_processing": {
+    "base_url": "https://files.papajohns.com/",
+    "login_url": "https://files.papajohns.com/Web/Account/Login.htm",
+    "download_dir": "/tmp/labor/download",
+    "extract_dir": "/tmp/labor/extract",
+    "config_date": "",
+    "day_parts": {
+      "Morning": [8.0, 10.0],
+      "Lunch": [10.0, 14.0],
+      "Afternoon": [14.0, 17.0],
+      "Dinner": [17.0, 21.0],
+      "Evening": [21.0, 24.0],
+      "Late Night": [0.0, 8.0]
+    }
+  },
+  
+  "doordash_update": {
+    "working_dir": "/tmp/doordash"
+  },
+  
+  "email_notifications": {
+    "enabled": true,
+    "recipients": [
+      "howard@ptpsystem.com",
+      "kim@papajohns-sd.com",
+      "madeline@ohiofood.net"
+    ]
+  },
+  
+  "sales_forecast": {
+    "forecast_horizon_weeks": 5
+  }
+}

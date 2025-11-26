@@ -1,0 +1,100 @@
+version: '3.8'
+
+services:
+  beachwood-olap-sync:
+    image: beachwood-integration:latest
+    pull_policy: never
+    container_name: beachwood-olap-sync
+    restart: unless-stopped
+    command: ["tail", "-f", "/dev/null"]
+
+    # Environment variables for Azure Key Vault access
+    environment:
+      - ENVIRONMENT=production
+      - LOG_LEVEL=INFO
+      - PYTHONUNBUFFERED=1
+
+      # Azure Service Principal credentials (set these in TrueNAS environment)
+      - AZURE_TENANT_ID=${AZURE_TENANT_ID}
+      - AZURE_CLIENT_ID=${AZURE_CLIENT_ID}
+      - AZURE_CLIENT_SECRET=${AZURE_CLIENT_SECRET}
+
+      # PostgreSQL access (if needed)
+      - POSTGRES_HOST=${POSTGRES_HOST:-172.17.0.1}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+
+    # Mount TrueNAS storage volumes
+    volumes:
+      # Logs directory on TrueNAS
+      - /mnt/Applications/beachwood/logs:/app/logs
+
+      # Temporary processing directories
+      - /mnt/Applications/beachwood/temp/labor:/tmp/labor
+      - /mnt/Applications/beachwood/temp/doordash:/tmp/doordash
+
+    # Option 1: Host networking for PostgreSQL access (uncomment to enable)
+    # network_mode: host
+
+    # Option 2: Bridge network with host access (default - safer)
+    networks:
+      - beachwood-network
+    extra_hosts:
+      - "truenas-postgres:172.17.0.1"
+
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '2.0'
+        reservations:
+          memory: 1G
+          cpus: '1.0'
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    # Logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Optional: Watchtower for automatic updates
+  watchtower:
+    image: containrrr/watchtower
+    container_name: beachwood-watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_POLL_INTERVAL=86400  # Check daily
+      - WATCHTOWER_INCLUDE_STOPPED=true
+    restart: unless-stopped
+    profiles:
+      - watchtower
+
+networks:
+  beachwood-network:
+    driver: bridge
+
+# Volumes for TrueNAS storage
+volumes:
+  beachwood-logs:
+    driver: local
+    driver_opts:
+      o: bind
+      type: none
+      device: /mnt/Applications/beachwood/logs
+  beachwood-temp:
+    driver: local
+    driver_opts:
+      o: bind
+      type: none
+      device: /mnt/Applications/beachwood/temp

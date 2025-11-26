@@ -1,0 +1,43 @@
+# Beachwood Data Integration - Python Dependencies
+# Container-ready (no pywin32!)
+
+# Core dependencies
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+pandas>=2.0.0
+openpyxl>=3.1.0
+python-dotenv>=1.0.0
+lxml>=4.9.0
+
+# Azure SDK for cloud services
+azure-keyvault-secrets>=4.7.0
+azure-identity>=1.14.0
+azure-storage-blob>=12.19.0
+azure-storage-file-share>=12.14.0
+
+# Microsoft Graph and authentication
+msal>=1.24.0
+Office365-REST-Python-Client>=2.5.0
+
+# Machine Learning (for sales forecast)
+scikit-learn>=1.3.0
+numpy>=1.24.0
+
+# Data processing
+python-dateutil>=2.8.0
+
+# OLAP/XMLA
+# olapy>=0.9.0
+
+# SSL/Security
+urllib3>=1.26.0
+
+# Testing (development only)
+pytest>=7.4.0
+pytest-cov>=4.1.0
+pytest-mock>=3.11.0
+
+# Linting and code quality (development only)
+black>=23.0.0
+flake8>=6.1.0
+mypy>=1.5.0

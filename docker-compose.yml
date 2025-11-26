@@ -1,0 +1,70 @@
+version: '3.8'
+
+services:
+  beachwood-integration:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: beachwood-integration:latest
+    container_name: beachwood-integration-dev
+    
+    environment:
+      # Environment selection
+      - ENVIRONMENT=dev
+      
+      # Azure Authentication (for Key Vault access)
+      # Option 1: Use Azure CLI authentication (if you've run 'az login' on host)
+      # Option 2: Set these variables with service principal credentials
+      - AZURE_TENANT_ID=${AZURE_TENANT_ID:-}
+      - AZURE_CLIENT_ID=${AZURE_CLIENT_ID:-}
+      - AZURE_CLIENT_SECRET=${AZURE_CLIENT_SECRET:-}
+      
+      # Logging
+      - LOG_LEVEL=DEBUG
+      - PYTHONUNBUFFERED=1
+    
+    volumes:
+      # Mount code for development (comment out for production)
+      - ./:/app
+      
+      # Temporary directories for file processing
+      - ./tmp/labor:/tmp/labor
+      - ./tmp/doordash:/tmp/doordash
+    
+    # Resource limits (adjust as needed)
+    mem_limit: 2g
+    cpus: 2.0
+    
+    # Restart policy
+    restart: unless-stopped
+    
+    # Network configuration
+    network_mode: bridge
+    
+    # Command (uncomment to override)
+    # command: python main.py
+
+  # Optional: Run tests
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: beachwood-integration:latest
+    container_name: beachwood-integration-test
+    
+    environment:
+      - ENVIRONMENT=test
+      - LOG_LEVEL=DEBUG
+    
+    volumes:
+      - ./:/app
+    
+    command: pytest tests/ -v --cov=modules
+    
+    profiles:
+      - test
+
+# Networks (if needed for multi-container setup)
+networks:
+  default:
+    name: beachwood-network
