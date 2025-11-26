@@ -15,10 +15,11 @@ services:
       - LOG_LEVEL=INFO
       - PYTHONUNBUFFERED=1
 
-      # Azure Service Principal credentials (set these in TrueNAS environment)
-      - AZURE_TENANT_ID=${AZURE_TENANT_ID}
-      - AZURE_CLIENT_ID=${AZURE_CLIENT_ID}
+      # Azure Service Principal credentials
+      - AZURE_TENANT_ID=c8b6ba98-3fc0-4153-83a9-01374492c0f5
+      - AZURE_CLIENT_ID=d056223e-f0de-4b16-b4e0-fec2a24109ff
       - AZURE_CLIENT_SECRET=${AZURE_CLIENT_SECRET}
+      - KEYVAULT_NAME=kv-bw-data-integration
 
       # PostgreSQL access (if needed)
       - POSTGRES_HOST=${POSTGRES_HOST:-172.17.0.1}
@@ -80,7 +81,6 @@ services:
       - WATCHTOWER_INCLUDE_RESTARTING=true
       - WATCHTOWER_ROLLING_RESTART=true
       - WATCHTOWER_NO_STARTUP_MESSAGE=false
-      - WATCHTOWER_NOTIFICATIONS=log
     restart: unless-stopped
     logging:
       driver: "json-file"
