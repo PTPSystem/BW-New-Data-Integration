@@ -42,7 +42,7 @@ NewIntegration/
    az login
    ```
 
-3. **Access to Azure Key Vault** `sf-kv-6338`:
+3. **Access to Azure Key Vault** `kv-bw-data-integration`:
    - azure-tenant-id
    - dataverse-client-id
    - dataverse-client-secret
@@ -182,7 +182,7 @@ Error: User does not have secrets get permission
 az role assignment create \
   --role "Key Vault Secrets User" \
   --assignee "your-email@company.com" \
-  --scope "/subscriptions/YOUR_SUB/resourceGroups/YOUR_RG/providers/Microsoft.KeyVault/vaults/sf-kv-6338"
+  --scope "/subscriptions/YOUR_SUB/resourceGroups/YOUR_RG/providers/Microsoft.KeyVault/vaults/kv-bw-data-integration"
 ```
 
 ### OLAP Connection Failed
@@ -225,10 +225,10 @@ Query returned 0 rows
          │ XMLA/MDX
          │ (HTTPS)
          ▼
-┌──────────────────┐      ┌──────────────────┐
-│ olap_to_dataverse│◄────►│  Azure Key Vault │
-│      .py         │      │    sf-kv-6338    │
-└────────┬─────────┘      └──────────────────┘
+┌──────────────────┐      ┌───────────────────────┐
+│ olap_to_dataverse│◄────►│  Azure Key Vault      │
+│      .py         │      │ kv-bw-data-integration│
+└────────┬─────────┘      └───────────────────────┘
          │ Web API
          │ (HTTPS)
          ▼
