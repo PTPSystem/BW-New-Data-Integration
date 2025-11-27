@@ -76,11 +76,15 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - WATCHTOWER_CLEANUP=true
-      - WATCHTOWER_POLL_INTERVAL=300  # Check every 5 minutes
+      - WATCHTOWER_POLL_INTERVAL=86400  # Check once per day (24 hours = 86400 seconds)
       - WATCHTOWER_LABEL_ENABLE=true  # Only update containers with watchtower label
       - WATCHTOWER_INCLUDE_RESTARTING=true
       - WATCHTOWER_ROLLING_RESTART=true
       - WATCHTOWER_NO_STARTUP_MESSAGE=false
+      - WATCHTOWER_HTTP_API_TOKEN=beachwood-manual-trigger-2025  # Token for manual updates
+      - WATCHTOWER_HTTP_API_UPDATE=true  # Enable HTTP API for manual triggers
+    ports:
+      - "8080:8080"  # Expose HTTP API for manual updates
     restart: unless-stopped
     logging:
       driver: "json-file"

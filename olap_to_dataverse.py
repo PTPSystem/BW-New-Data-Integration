@@ -600,10 +600,35 @@ def upsert_to_dataverse(environment_url, access_token, table_name, records, logg
             response = requests.post(batch_url, headers=batch_headers, data=batch_body.encode('utf-8'))
             
             if response.status_code == 200:
-                # Parse response to count successes
-                # For simplicity, assume all succeeded if batch succeeded
-                updated_count += len(batch_records)
-                log(f"  Batch {batch_num + 1}/{total_batches}: ✓ {len(batch_records)} records")
+                # Parse multipart response to count creates vs updates
+                # HTTP 201 = Created, HTTP 204 = Updated (No Content), HTTP 200 = Updated (with content)
+                response_text = response.text
+                
+                batch_created = 0
+                batch_updated = 0
+                batch_errors = 0
+                
+                # Count HTTP status codes in the batch response
+                # Look for "HTTP/1.1 201" (created) vs "HTTP/1.1 204" or "HTTP/1.1 200" (updated)
+                import re
+                status_codes = re.findall(r'HTTP/\d\.\d (\d{3})', response_text)
+                
+                for status in status_codes:
+                    if status == '201':
+                        batch_created += 1
+                    elif status in ['200', '204']:
+                        batch_updated += 1
+                    else:
+                        batch_errors += 1
+                
+                created_count += batch_created
+                updated_count += batch_updated
+                error_count += batch_errors
+                
+                if batch_errors > 0:
+                    log(f"  Batch {batch_num + 1}/{total_batches}: ✓ {batch_created} created, {batch_updated} updated, {batch_errors} errors")
+                else:
+                    log(f"  Batch {batch_num + 1}/{total_batches}: ✓ {batch_created} created, {batch_updated} updated")
             else:
                 error_count += len(batch_records)
                 log(f"  Batch {batch_num + 1}/{total_batches}: ✗ Failed ({response.status_code})")
