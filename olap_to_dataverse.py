@@ -568,6 +568,7 @@ def upsert_to_dataverse(environment_url, access_token, table_name, records, logg
         lines.append("\r\n")
         
         # Add each PATCH request to the changeset
+        # Use Prefer header to get the entity back so we can detect creates vs updates
         for i, record in enumerate(batch_records, 1):
             business_key = record['crf63_businesskey']
             upsert_url = f"{environment_url}/api/data/v9.2/{table_name}(crf63_businesskey='{business_key}')"
@@ -579,6 +580,7 @@ def upsert_to_dataverse(environment_url, access_token, table_name, records, logg
             lines.append("\r\n")
             lines.append(f"PATCH {upsert_url} HTTP/1.1\r\n")
             lines.append("Content-Type: application/json\r\n")
+            lines.append("Prefer: return=representation\r\n")
             lines.append("\r\n")
             lines.append(json.dumps(record) + "\r\n")
         
@@ -601,24 +603,42 @@ def upsert_to_dataverse(environment_url, access_token, table_name, records, logg
             
             if response.status_code == 200:
                 # Parse multipart response to count creates vs updates
-                # HTTP 201 = Created, HTTP 204 = Updated (No Content), HTTP 200 = Updated (with content)
+                # With Prefer: return=representation:
+                #   HTTP 201 = Created (returns entity with OData-EntityId header)
+                #   HTTP 200 = Updated (returns entity)
+                #   HTTP 204 = Updated (no content - fallback)
                 response_text = response.text
                 
                 batch_created = 0
                 batch_updated = 0
                 batch_errors = 0
                 
-                # Count HTTP status codes in the batch response
-                # Look for "HTTP/1.1 201" (created) vs "HTTP/1.1 204" or "HTTP/1.1 200" (updated)
+                # Split response into individual responses
                 import re
-                status_codes = re.findall(r'HTTP/\d\.\d (\d{3})', response_text)
                 
-                for status in status_codes:
+                # Find all HTTP responses in the batch
+                # Pattern: HTTP/1.1 <status_code> followed by headers and optional body
+                response_pattern = r'HTTP/\d\.\d\s+(\d{3})\s+[^\r\n]*\r?\n((?:[^\r\n]+\r?\n)*)'
+                matches = re.finditer(response_pattern, response_text)
+                
+                for match in matches:
+                    status = match.group(1)
+                    headers = match.group(2)
+                    
                     if status == '201':
+                        # Created - new record
                         batch_created += 1
                     elif status in ['200', '204']:
+                        # Check for OData-EntityId header which appears on creates
+                        if 'OData-EntityId' in headers or 'odata-entityid' in headers.lower():
+                            batch_created += 1
+                        else:
+                            batch_updated += 1
+                    elif status.startswith('2'):
+                        # Other 2xx success codes - assume update
                         batch_updated += 1
                     else:
+                        # Error status
                         batch_errors += 1
                 
                 created_count += batch_created
