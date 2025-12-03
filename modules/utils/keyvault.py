@@ -4,8 +4,14 @@ Supports both DefaultAzureCredential (preferred) and client credentials.
 """
 
 import os
+from pathlib import Path
+from dotenv import load_dotenv
 from azure.keyvault.secrets import SecretClient
 from azure.identity import DefaultAzureCredential, ClientSecretCredential
+
+# Load environment variables from .env file
+env_path = Path(__file__).parent.parent.parent / '.env'
+load_dotenv(dotenv_path=env_path)
 
 # Key Vault configuration
 KEY_VAULT_NAME = "kv-bw-data-integration"
