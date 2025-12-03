@@ -2,6 +2,90 @@
 
 This directory contains the configuration files needed to deploy the Beachwood OLAP-to-Dataverse sync on TrueNAS using either direct Docker commands or Portainer.
 
+## Quick Start
+
+### Container Update Script
+
+The `update-container.sh` script automatically pulls the latest Docker image and recreates the container:
+
+```bash
+#!/bin/bash
+# Pull latest image
+docker pull ghcr.io/ptpsystem/beachwood-integration:latest
+
+# Get current image ID
+OLD_IMAGE=$(docker inspect beachwood-olap-sync --format='{{.Image}}' 2>/dev/null)
+NEW_IMAGE=$(docker inspect ghcr.io/ptpsystem/beachwood-integration:latest --format='{{.Id}}')
+
+# Only recreate if image changed
+if [ "$OLD_IMAGE" != "$NEW_IMAGE" ]; then
+    echo "New image detected, updating container..."
+    docker stop beachwood-olap-sync
+    docker rm beachwood-olap-sync
+    docker run -d \
+      --name beachwood-olap-sync \
+      --restart unless-stopped \
+      -e ENVIRONMENT=production \
+      -e LOG_LEVEL=INFO \
+      -e PYTHONUNBUFFERED=1 \
+      -e AZURE_TENANT_ID=c8b6ba98-3fc0-4153-83a9-01374492c0f5 \
+      -e AZURE_CLIENT_ID=d056223e-f0de-4b16-b4e0-fec2a24109ff \
+      -e AZURE_CLIENT_SECRET="${AZURE_CLIENT_SECRET}" \
+      -e KEYVAULT_NAME=kv-bw-data-integration \
+      -v /mnt/Applications/beachwood/logs:/app/logs \
+      -v /mnt/Applications/beachwood/temp/labor:/tmp/labor \
+      -v /mnt/Applications/beachwood/temp/doordash:/tmp/doordash \
+      ghcr.io/ptpsystem/beachwood-integration:latest \
+      tail -f /dev/null
+    echo "Container updated!"
+else
+    echo "No new image, skipping update."
+fi
+```
+
+**Location**: `/mnt/Applications/beachwood/update-container.sh`
+
+### Cron Jobs (TrueNAS Web UI)
+
+Configure these in **Tasks** → **Cron Jobs** → **Add**:
+
+#### 1. Container Update (Daily at 2:00 AM)
+| Setting | Value |
+|---------|-------|
+| Description | Update Beachwood Docker Container |
+| Command | `/mnt/Applications/beachwood/update-container.sh >> /mnt/Applications/beachwood/logs/update.log 2>&1` |
+| Run As User | `root` |
+| Schedule | `0 2 * * *` |
+
+#### 2. Daily OLAP Sync (Daily at 6:00 AM)
+| Setting | Value |
+|---------|-------|
+| Description | Beachwood Daily OLAP Sync |
+| Command | `docker exec beachwood-olap-sync python olap_to_dataverse.py --query-type last_2_weeks --send-email >> /mnt/Applications/beachwood/logs/cron.log 2>&1` |
+| Run As User | `root` |
+| Schedule | `0 6 * * *` |
+
+#### 3. Weekly Full Sync (Sundays at 3:00 AM)
+| Setting | Value |
+|---------|-------|
+| Description | Beachwood Weekly Full Sync |
+| Command | `docker exec beachwood-olap-sync python olap_to_dataverse.py --query-type full_bi_data --send-email >> /mnt/Applications/beachwood/logs/cron-full.log 2>&1` |
+| Run As User | `root` |
+| Schedule | `0 3 * * 0` |
+
+### Manual Commands
+
+```bash
+# Manually update container
+sudo /mnt/Applications/beachwood/update-container.sh
+
+# Manually run OLAP sync
+sudo docker exec beachwood-olap-sync python olap_to_dataverse.py --query-type last_2_weeks --send-email
+
+# Check container version
+sudo docker inspect beachwood-olap-sync | grep -i version
+```
+
 ## Deployment Options
 
 ### Option 1: Portainer (Recommended for GUI Management)

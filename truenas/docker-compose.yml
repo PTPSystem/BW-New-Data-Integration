@@ -6,8 +6,6 @@ services:
     container_name: beachwood-olap-sync
     restart: unless-stopped
     command: ["tail", "-f", "/dev/null"]
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
 
     # Environment variables for Azure Key Vault access
     environment:
@@ -68,29 +66,9 @@ services:
         max-size: "10m"
         max-file: "3"
 
-  # Watchtower for automatic updates from GitHub
-  watchtower:
-    image: containrrr/watchtower
-    container_name: beachwood-watchtower
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    environment:
-      - WATCHTOWER_CLEANUP=true
-      - WATCHTOWER_POLL_INTERVAL=86400  # Check once per day (24 hours = 86400 seconds)
-      - WATCHTOWER_LABEL_ENABLE=true  # Only update containers with watchtower label
-      - WATCHTOWER_INCLUDE_RESTARTING=true
-      - WATCHTOWER_ROLLING_RESTART=true
-      - WATCHTOWER_NO_STARTUP_MESSAGE=false
-      - WATCHTOWER_HTTP_API_TOKEN=beachwood-manual-trigger-2025  # Token for manual updates
-      - WATCHTOWER_HTTP_API_UPDATE=true  # Enable HTTP API for manual triggers
-    ports:
-      - "8080:8080"  # Expose HTTP API for manual updates
-    restart: unless-stopped
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+# NOTE: Watchtower has been removed. Container updates are now handled by a cron job.
+# See /mnt/Applications/beachwood/update-container.sh
+# Scheduled via TrueNAS Web UI: Tasks -> Cron Jobs (runs daily at 2 AM)
 
 networks:
   beachwood-network:
