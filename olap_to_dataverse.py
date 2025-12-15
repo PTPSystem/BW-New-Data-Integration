@@ -422,7 +422,21 @@ SELECT
     [Measures].[Mileage Cost Local],
     [Measures].[Discounts USD],
     [Measures].[TY Total Order Accuracy Survey Count],
-    [Measures].[Order Accuracy %]
+    [Measures].[Order Accuracy %],
+    [Measures].[SMG Avg Closure],
+    [Measures].[SMG Cases Opened],
+    [Measures].[SMG Cases Resolved],
+    [Measures].[SMG Value %],
+    [Measures].[Singles],
+    [Measures].[Doubles],
+    [Measures].[Triples Plus],
+    [Measures].[Runs],
+    [Measures].[TTDT Orders],
+    [Measures].[To The Door Time for Dispatch Orders],
+    [Measures].[To The Door Time Minutes],
+    [Measures].[TY Taste Of Food Good Survey Count],
+    [Measures].[TY Total Taste Of Food Survey Count],
+    [Measures].[TY Order Accuracy Good Survey Count]
 }} 
 DIMENSION PROPERTIES PARENT_UNIQUE_NAME,HIERARCHY_UNIQUE_NAME ON COLUMNS,
 NON EMPTY CrossJoin(
@@ -454,7 +468,7 @@ def get_sample_mdx_queries(fiscal_years=[2023, 2024, 2025]):
     where_clause = f"WHERE {{{fiscal_year_members}}}"
     
     # Main query: All BI metrics by Store and Date for specified fiscal years
-    # This query returns 33 measures across all stores and dates
+    # This query returns 47 measures (33 original + 14 service metrics) across all stores and dates
     query_full_bi_data = f"""
 SELECT 
 {{
@@ -490,7 +504,21 @@ SELECT
     [Measures].[Mileage Cost Local],
     [Measures].[Discounts USD],
     [Measures].[TY Total Order Accuracy Survey Count],
-    [Measures].[Order Accuracy %]
+    [Measures].[Order Accuracy %],
+    [Measures].[SMG Avg Closure],
+    [Measures].[SMG Cases Opened],
+    [Measures].[SMG Cases Resolved],
+    [Measures].[SMG Value %],
+    [Measures].[Singles],
+    [Measures].[Doubles],
+    [Measures].[Triples Plus],
+    [Measures].[Runs],
+    [Measures].[TTDT Orders],
+    [Measures].[To The Door Time for Dispatch Orders],
+    [Measures].[To The Door Time Minutes],
+    [Measures].[TY Taste Of Food Good Survey Count],
+    [Measures].[TY Total Taste Of Food Survey Count],
+    [Measures].[TY Order Accuracy Good Survey Count]
 }} 
 DIMENSION PROPERTIES PARENT_UNIQUE_NAME,HIERARCHY_UNIQUE_NAME ON COLUMNS,
 NON EMPTY CrossJoin(
@@ -959,11 +987,20 @@ def upsert_to_dataverse(environment_url, access_token, table_name, records, logg
                     created = r.text.count("HTTP/1.1 201")
                     updated = r.text.count("HTTP/1.1 204")
                     errors = len(chunk) - (created + updated)
+                    
+                    # Log first error if any for debugging
+                    if errors > 0 and "HTTP/1.1 4" in r.text:
+                        import re
+                        error_match = re.search(r'HTTP/1.1 (4\d{2}.*?)(?=--batch|$)', r.text, re.DOTALL)
+                        if error_match:
+                            log(f"\n⚠️  Batch error sample: {error_match.group(1)[:500]}")
+                    
                     return {"created": created, "updated": updated, "errors": errors}
                 if r.status_code == 429:
                     time.sleep(int(r.headers.get("Retry-After", 5)))
                     continue
-            except:
+            except Exception as e:
+                log(f"\n⚠️  Batch exception: {str(e)[:200]}")
                 time.sleep(3)
         return {"created": 0, "updated": 0, "errors": len(chunk)}
 
@@ -1103,6 +1140,28 @@ def transform_olap_to_dataverse_records(df, logger=None):
                 "crf63_orderaccuracypct": get_num('Order Accuracy %'),
                 "crf63_totalcalls": get_int('Total Calls'),
                 "crf63_answeredcalls": get_int('Answered Calls'),
+                
+                # Service Metrics - SMG (4)
+                "crf63_smgavgclosure": get_num('SMG Avg Closure'),
+                "crf63_smgcasesopened": get_int('SMG Cases Opened'),
+                "crf63_smgcasesresolved": get_int('SMG Cases Resolved'),
+                "crf63_smgvaluepct": get_num('SMG Value %'),
+                
+                # Service Metrics - Delivery Performance (4)
+                "crf63_singles": get_int('Singles'),
+                "crf63_doubles": get_int('Doubles'),
+                "crf63_triplesplus": get_int('Triples Plus'),
+                "crf63_runs": get_int('Runs'),
+                
+                # Service Metrics - TTDT (3)
+                "crf63_ttdtorders": get_int('TTDT Orders'),
+                "crf63_todoortimedispatch": get_num('To The Door Time for Dispatch Orders'),
+                "crf63_todoortimeminutes": get_num('To The Door Time Minutes'),
+                
+                # Service Metrics - Taste Surveys (3)
+                "crf63_tasteoffoodgood": get_int('TY Taste Of Food Good Survey Count'),
+                "crf63_tasteoffoodtotal": get_int('TY Total Taste Of Food Survey Count'),
+                "crf63_orderaccuracygood": get_int('TY Order Accuracy Good Survey Count'),
             }
             
             records.append(record)
