@@ -955,31 +955,41 @@ def upsert_to_dataverse(environment_url, access_token, table_name, records, logg
             try:
                 r = session.post(batch_url, headers=headers, data=body, timeout=600)
                 if r.status_code in (200, 204):
-                    return len(chunk)
+                    # Parse response to count creates (201) vs updates (204)
+                    created = r.text.count("HTTP/1.1 201")
+                    updated = r.text.count("HTTP/1.1 204")
+                    errors = len(chunk) - (created + updated)
+                    return {"created": created, "updated": updated, "errors": errors}
                 if r.status_code == 429:
                     time.sleep(int(r.headers.get("Retry-After", 5)))
                     continue
             except:
                 time.sleep(3)
-        return 0
+        return {"created": 0, "updated": 0, "errors": len(chunk)}
 
     # Create batches and process
     batch_size = 400
     batches = [valid_records[i:i + batch_size] for i in range(0, total, batch_size)]
     log(f"Fast upserting {total:,} records in {len(batches)} batches of {batch_size} (6 parallel threads)")
 
-    processed = 0
+    total_created = 0
+    total_updated = 0
+    total_errors = 0
     start_time = time.time()
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=6) as ex:
         for future in concurrent.futures.as_completed([ex.submit(upsert_batch, c) for c in batches]):
-            processed += future.result()
+            result = future.result()
+            total_created += result["created"]
+            total_updated += result["updated"]
+            total_errors += result["errors"]
+            processed = total_created + total_updated
             rate = processed / (time.time() - start_time) if time.time() - start_time > 0 else 0
-            log(f"\r  Progress: {processed:,}/{total:,} records | {rate:,.0f} rows/sec")
+            log(f"\r  Progress: {processed:,}/{total:,} records ({total_created:,} created, {total_updated:,} updated) | {rate:,.0f} rows/sec")
 
     elapsed = time.time() - start_time
-    log(f"\nFast upsert complete: {processed:,} records in {elapsed:.1f}s → {processed/elapsed:,.0f} rows/sec")
-    return 0, processed, total - processed
+    log(f"\nFast upsert complete: {total_created:,} created, {total_updated:,} updated, {total_errors:,} errors in {elapsed:.1f}s → {(total_created+total_updated)/elapsed:,.0f} rows/sec")
+    return total_created, total_updated, total_errors
 
 def transform_olap_to_dataverse_records(df, logger=None):
     """
