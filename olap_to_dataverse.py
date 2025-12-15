@@ -964,7 +964,7 @@ def upsert_to_dataverse(environment_url, access_token, table_name, records, logg
                 f"\r\n"
                 f"PATCH {table_name}(crf63_businesskey='{key}') HTTP/1.1\r\n"
                 f"Content-Type: application/json\r\n"
-                f"Prefer: odata.allow-upsert=true\r\n"
+                f"Prefer: return=representation,odata.include-annotations=*\r\n"
                 f"\r\n"
                 f"{payload}\r\n"
             ).encode()
@@ -983,17 +983,74 @@ def upsert_to_dataverse(environment_url, access_token, table_name, records, logg
             try:
                 r = session.post(batch_url, headers=headers, data=body, timeout=600)
                 if r.status_code in (200, 204):
-                    # Parse response to count creates (201) vs updates (204)
-                    created = r.text.count("HTTP/1.1 201")
-                    updated = r.text.count("HTTP/1.1 204")
-                    errors = len(chunk) - (created + updated)
+                    # PATCH with return=representation returns HTTP 200 OK with entity body
+                    # Check createdon vs modifiedon timestamps to distinguish create from update
+                    import re
+                    import json as json_module
+                    from datetime import datetime
                     
-                    # Log first error if any for debugging
-                    if errors > 0 and "HTTP/1.1 4" in r.text:
-                        import re
-                        error_match = re.search(r'HTTP/1.1 (4\d{2}.*?)(?=--batch|$)', r.text, re.DOTALL)
-                        if error_match:
-                            log(f"\n⚠️  Batch error sample: {error_match.group(1)[:500]}")
+                    created = 0
+                    updated = 0
+                    errors = 0
+                    
+                    # Split by changeset response boundaries
+                    responses = re.split(r'--changesetresponse_[\da-f-]+', r.text)
+                    
+                    for resp in responses:
+                        if 'HTTP/1.1 200 OK' in resp or 'HTTP/1.1 201 Created' in resp:
+                            # Find JSON body - starts after double newline, extract complete JSON object
+                            json_start = resp.find('\n\n{')
+                            if json_start == -1:
+                                json_start = resp.find('\r\n\r\n{')
+                                if json_start != -1:
+                                    json_start += 4
+                            else:
+                                json_start += 2
+                            
+                            if json_start > 0:
+                                json_text = resp[json_start:]
+                                # Find matching closing brace
+                                brace_count = 0
+                                json_end = 0
+                                for i, char in enumerate(json_text):
+                                    if char == '{': brace_count += 1
+                                    elif char == '}':
+                                        brace_count -= 1
+                                        if brace_count == 0:
+                                            json_end = i + 1
+                                            break
+                                
+                                if json_end > 0:
+                                    try:
+                                        data = json_module.loads(json_text[:json_end])
+                                        created_on = data.get('createdon', '')
+                                        modified_on = data.get('modifiedon', '')
+                                        
+                                        if created_on and modified_on:
+                                            c_time = datetime.fromisoformat(created_on.replace('Z', '+00:00'))
+                                            m_time = datetime.fromisoformat(modified_on.replace('Z', '+00:00'))
+                                            # If timestamps are within 2 seconds, it's a new record
+                                            if abs((c_time - m_time).total_seconds()) < 2:
+                                                created += 1
+                                            else:
+                                                updated += 1
+                                        else:
+                                            updated += 1
+                                    except:
+                                        updated += 1
+                                else:
+                                    updated += 1
+                            else:
+                                updated += 1
+                        elif 'HTTP/1.1 4' in resp or 'HTTP/1.1 5' in resp:
+                            errors += 1
+                    
+                    # Verify counts add up, if not use simple status code counting as fallback
+                    if created + updated + errors != len(chunk):
+                        # Fallback: count by status codes (more reliable than JSON parsing)
+                        created = r.text.count('HTTP/1.1 201 Created')
+                        updated = r.text.count('HTTP/1.1 200 OK')
+                        errors = len(chunk) - (created + updated)
                     
                     return {"created": created, "updated": updated, "errors": errors}
                 if r.status_code == 429:
