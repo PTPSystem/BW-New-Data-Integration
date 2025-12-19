@@ -221,7 +221,7 @@ Secrets are currently stored in:
 ### Phase 2: Component Migration (Week 3-5)
 **Goal**: Migrate each module to cloud-native approach
 
-- [ ] Migrate PowerBI Update to OLAP-to-Dataverse
+- [x] Migrate PowerBI Update to OLAP-to-Dataverse
 - [ ] Update Labor Processing for SharePoint API
 - [ ] Update DoorDash Update for cloud storage
 - [ ] Update Forecast modules for cloud storage
@@ -360,8 +360,8 @@ response = execute_xmla_mdx(
 3. ✅ Test XMLA connection
 4. [x] Create Dataverse table `crf63_olapbidatas`
 5. ✅ Add OLAP password to Key Vault (olap-username and olap-password)
-6. [ ] Test end-to-end data flow
-7. [ ] Update main.py to use new module
+6. [x] Test end-to-end data flow
+7. [x] Update main.py to use new module
 
 #### Data Mapping
 
@@ -632,8 +632,8 @@ Table Details:
 **Purpose**: Replace Excel COM automation with direct OLAP-to-Dataverse sync
 
 **Current State:**
-- Module: `modules/olap_to_dataverse.py` (526 lines) ✅ Created
-- Script: `run_olap_to_dataverse.py` (77 lines) ✅ Created
+- Module: `modules/olap_sync.py` (Refactored into modular components) ✅ Created
+- Script: `olap_to_dataverse.py` (Wrapper script) ✅ Created
 
 **Replaces:**
 - `modules/powerbi_update.py` (Windows-only Excel COM)
@@ -648,7 +648,12 @@ cd /Users/howardshen/Library/CloudStorage/OneDrive-Personal/Github/Beachwood-Dat
 mkdir -p NewIntegration/modules/utils
 
 # Copy OLAP module
-cp modules/olap_to_dataverse.py NewIntegration/modules/
+cp modules/olap_sync.py NewIntegration/modules/
+cp modules/olap.py NewIntegration/modules/
+cp modules/dataverse.py NewIntegration/modules/
+cp modules/notifications.py NewIntegration/modules/
+cp modules/mdx_queries.py NewIntegration/modules/
+cp modules/transformers.py NewIntegration/modules/
 
 # Copy utilities
 cp modules/utils/keyvault.py NewIntegration/modules/utils/
