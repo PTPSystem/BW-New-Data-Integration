@@ -1,0 +1,39 @@
+table: crf63_saleschanneldailies
+alternate_key: crf63_businesskey
+
+business_key:
+  format: "{StoreNumber}_{CalendarDate:%Y%m%d}_{SourceActor}_{SourceChannel}_{DayPart}"
+
+fields:
+  StoreNumber:
+    dataverse: crf63_storenumber
+    type: string
+  CalendarDate:
+    dataverse: crf63_calendardate
+    type: date
+  SourceActor:
+    dataverse: crf63_sourceactor
+    type: string
+  SourceChannel:
+    dataverse: crf63_sourcechannel
+    type: string
+  DayPart:
+    dataverse: crf63_daypart
+    type: string
+
+measures:
+  "TY Net Sales USD":
+    dataverse: crf63_tynetsalesusd
+    type: decimal
+  "TY Orders":
+    dataverse: crf63_tyorders
+    type: int
+  "Discounts USD":
+    dataverse: crf63_discountsusd
+    type: decimal
+  "LY Net Sales USD":
+    dataverse: crf63_lynetsalesusd
+    type: decimal
+  "LY Orders":
+    dataverse: crf63_lyorders
+    type: int

@@ -26,6 +26,9 @@ numpy>=1.24.0
 # Data processing
 python-dateutil>=2.8.0
 
+# Config-driven pipelines
+PyYAML>=6.0.1
+
 # OLAP/XMLA
 # olapy>=0.9.0
 

@@ -1,0 +1,108 @@
+# Pipeline definitions for MDX → Dataverse sync.
+# Each pipeline specifies:
+# - OLAP catalog (optional; defaults to config olap.catalog)
+# - MDX query template (string)
+# - Parser to use for XMLA response
+# - Mapping file for DataFrame → Dataverse record transformation
+
+pipelines:
+  daily_sales:
+    catalog: OARS Franchise
+    parser: celldata
+    mapping: mappings/daily_sales.yaml
+    mdx: |-
+      SELECT 
+      {
+          [Measures].[TY Net Sales USD],
+          [Measures].[L2Y Comp Net Sales USD],
+          [Measures].[L3Y Comp Net Sales USD],
+          [Measures].[LY Comp Net Sales USD],
+          [Measures].[TY Target Food Cost USD],
+          [Measures].[Actual Food Cost USD],
+          [Measures].[FLMD USD],
+          [Measures].[Target Profit after FLM Local (Fran)],
+          [Measures].[Actual FLM w/o Vacation Accrual Local],
+          [Measures].[Actual Labor $ USD],
+          [Measures].[HS Total Actual Hours],
+          [Measures].[Store Days],
+          [Measures].[Make Time Minutes],
+          [Measures].[TY Orders],
+          [Measures].[Rack Time Minutes],
+          [Measures].[Total OTD Time (Hours)],
+          [Measures].[Deliveries],
+          [Measures].[BOZOCORO Orders],
+          [Measures].[OTD Order Count],
+          [Measures].[Total Cash Over/Short USD],
+          [Measures].[LY Orders],
+          [Measures].[TY Total OSAT Survey Count],
+          [Measures].[TY OSAT Satisfied Survey Count],
+          [Measures].[Total Calls],
+          [Measures].[Answered Calls],
+          [Measures].[FLMDPC USD (Fran)],
+          [Measures].[m_ty_agg_commission_local_sum],
+          [Measures].[TY Dispatched Delivery Orders],
+          [Measures].[Avg TTDT],
+          [Measures].[Mileage Cost Local],
+          [Measures].[Discounts USD],
+          [Measures].[TY Total Order Accuracy Survey Count],
+          [Measures].[Order Accuracy %],
+          [Measures].[SMG Avg Closure],
+          [Measures].[SMG Cases Opened],
+          [Measures].[SMG Cases Resolved],
+          [Measures].[SMG Value %],
+          [Measures].[Singles],
+          [Measures].[Doubles],
+          [Measures].[Triples Plus],
+          [Measures].[Runs],
+          [Measures].[TTDT Orders],
+          [Measures].[To The Door Time for Dispatch Orders],
+          [Measures].[To The Door Time Minutes],
+          [Measures].[TY Taste Of Food Good Survey Count],
+          [Measures].[TY Total Taste Of Food Survey Count],
+          [Measures].[TY Order Accuracy Good Survey Count]
+      } 
+      DIMENSION PROPERTIES PARENT_UNIQUE_NAME,HIERARCHY_UNIQUE_NAME ON COLUMNS,
+      NON EMPTY CrossJoin(
+          Hierarchize({[Franchise].[Store Number Label].[Store Number Label].AllMembers}),
+          Hierarchize({[Calendar].[Calendar Date].[Calendar Date].AllMembers})
+      )
+      DIMENSION PROPERTIES PARENT_UNIQUE_NAME,HIERARCHY_UNIQUE_NAME ON ROWS
+      FROM [OARS Franchise]
+      WHERE (${slicer})
+      CELL PROPERTIES VALUE, FORMAT_STRING, LANGUAGE, BACK_COLOR, FORE_COLOR, FONT_FLAGS
+
+  sales_channel:
+    catalog: OARS Franchise
+    parser: sales_channel_daily
+    mapping: mappings/sales_channel.yaml
+    mdx: |-
+      SELECT {[Measures].[TY Net Sales USD],[Measures].[TY Orders],[Measures].[Discounts USD],[Measures].[LY Net Sales USD],[Measures].[LY Orders]} DIMENSION PROPERTIES PARENT_UNIQUE_NAME,HIERARCHY_UNIQUE_NAME ON COLUMNS , 
+      NON EMPTY CrossJoin(CrossJoin(CrossJoin(CrossJoin(Hierarchize({[Franchise].[Store Number Label].[Store Number Label].AllMembers}), Hierarchize({[Calendar].[Calendar Date].[Calendar Date].AllMembers})), Hierarchize({[Source Channel].[Source Actor].[Source Actor].AllMembers})), 
+      Hierarchize({[Source Channel].[Source Channel].[Source Channel].AllMembers})), Hierarchize({[Day Part Dimension].[Day Part].[Day Part].AllMembers})) DIMENSION PROPERTIES PARENT_UNIQUE_NAME,HIERARCHY_UNIQUE_NAME ON ROWS  FROM [OARS Franchise] 
+      WHERE (${slicer}) CELL PROPERTIES VALUE, FORMAT_STRING, LANGUAGE, BACK_COLOR, FORE_COLOR, FONT_FLAGS
+
+  offers:
+    catalog: Offers
+    parser: offers
+    mapping: mappings/offers.yaml
+    mdx: |-
+      SELECT {
+          [Measures].[Redeemed Count],
+          [Measures].[Discount Amount USD],
+          [Measures].[Gross Margin USD],
+          [Measures].[Order Mix %],
+          [Measures].[Sales Mix USD %],
+          [Measures].[Net Sales USD],
+          [Measures].[Order Count],
+          [Measures].[Target Food Cost USD]
+      } 
+      DIMENSION PROPERTIES PARENT_UNIQUE_NAME,HIERARCHY_UNIQUE_NAME ON COLUMNS, 
+      NON EMPTY CrossJoin(CrossJoin(CrossJoin(
+          Hierarchize({[Calendar].[Calendar Date].[Calendar Date].AllMembers}), 
+          Hierarchize({[Stores].[Store Number].[Store Number].AllMembers})), 
+          Hierarchize({[Offer Code].[Offer Code Hierarchy].[Offer Code Level].AllMembers})), 
+          Hierarchize({[Offer Code].[Offer POS Description].[Offer POS Description].AllMembers})) 
+      DIMENSION PROPERTIES PARENT_UNIQUE_NAME,HIERARCHY_UNIQUE_NAME ON ROWS  
+      FROM [Offers] 
+      WHERE (${slicer}) 
+      CELL PROPERTIES VALUE, FORMAT_STRING, LANGUAGE, BACK_COLOR, FORE_COLOR, FONT_FLAGS

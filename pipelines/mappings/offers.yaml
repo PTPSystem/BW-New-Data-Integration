@@ -1,0 +1,45 @@
+table: crf63_offerses
+alternate_key: crf63_businesskey
+
+business_key:
+  format: "{StoreNumber}_{CalendarDate:%Y%m%d}_{OfferCode}"
+
+fields:
+  StoreNumber:
+    dataverse: crf63_storenumber
+    type: string
+  CalendarDate:
+    dataverse: crf63_calendardate
+    type: date
+  OfferCode:
+    dataverse: crf63_offercode
+    type: string
+  OfferPOSDescription:
+    dataverse: crf63_offerposdescription
+    type: string
+
+measures:
+  "Redeemed Count":
+    dataverse: crf63_redeemedcount
+    type: int
+  "Discount Amount USD":
+    dataverse: crf63_discountamountusd
+    type: decimal
+  "Gross Margin USD":
+    dataverse: crf63_grossmarginusd
+    type: decimal
+  "Order Mix %":
+    dataverse: crf63_ordermixpercent
+    type: decimal
+  "Sales Mix USD %":
+    dataverse: crf63_salesmixusdpercent
+    type: decimal
+  "Net Sales USD":
+    dataverse: crf63_netsalesusd
+    type: decimal
+  "Order Count":
+    dataverse: crf63_ordercount
+    type: int
+  "Target Food Cost USD":
+    dataverse: crf63_targetfoodcostusd
+    type: decimal

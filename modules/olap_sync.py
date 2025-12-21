@@ -13,6 +13,8 @@ from modules.dataverse import get_dataverse_access_token, upsert_to_dataverse
 from modules.notifications import send_email_notification
 from modules.mdx_queries import get_sample_mdx_queries, get_sales_channel_daily_mdx, get_offers_mdx, get_daily_sales_mdx
 from modules.transformers import transform_olap_to_dataverse_records, transform_sales_channel_daily_records, transform_offers_records
+from modules.pipeline_config import load_pipelines, load_mapping, render_mdx_template
+from modules.pipeline_runner import run_mdx_to_df, transform_df_to_records
 import pandas as pd
 
 load_dotenv()
@@ -433,65 +435,172 @@ def main():
     
     parser = argparse.ArgumentParser(description='Sync OLAP data to Dataverse')
     parser.add_argument(
-        '--mdx-query',
-        choices=['daily_sales', 'sales_channel', 'offers', 'all'],
-        default='daily_sales',
-        help='Type of data to sync: daily_sales (OARS BI Data + Service measures), sales_channel (Sales Channel Daily), offers (Offers), or all (sync all query types)'
+        '--query',
+        choices=['daily', 'offers', 'sales_channel', 'all'],
+        default='daily',
+        help='What to sync: daily, offers, sales_channel, or all'
     )
     parser.add_argument(
-        '--mdx-length',
-        choices=['1_week', '2_week', 'full'],
-        default='2_week',
-        help='Time range for the query: 1_week (7 days), 2_week (14 days), or full (all fiscal years)'
+        '--length',
+        choices=['1wk', '2wk', '2yr'],
+        default='2wk',
+        help='Time range: 1wk, 2wk (default), or 2yr (requires confirmation)'
     )
     parser.add_argument(
-        '--send-email',
+        '--fy',
+        type=int,
+        default=None,
+        help='Fiscal year slice (e.g., 2023). Overrides MyView-based --length slicing.'
+    )
+    parser.add_argument(
+        '--period',
+        type=int,
+        default=None,
+        help='13-4 period number (1-13). Requires --fy. Works with offers and sales_channel pipelines.'
+    )
+    parser.add_argument(
+        '--confirm-2yr',
+        action='store_true',
+        help='Required acknowledgement for --length 2yr'
+    )
+    parser.add_argument(
+        '--email',
         choices=['yes', 'no'],
         default='no',
         help='Send email notification after sync completes (default: no)'
     )
+    parser.add_argument(
+        '--pipeline',
+        default=None,
+        help='(Advanced) Run a config-driven pipeline by name from pipelines/pipelines.yaml'
+    )
+    parser.add_argument(
+        '--print-mdx',
+        action='store_true',
+        help='Print the rendered MDX query before executing (debugging)'
+    )
     args = parser.parse_args()
+
+    if args.length == '2yr' and not args.confirm_2yr:
+        raise SystemExit(
+            "--length 2yr can be expensive and is intended for table backfills. "
+            "Re-run with --confirm-2yr to proceed."
+        )
+
+    def run_pipeline_by_name(
+        pipeline_name: str,
+        length: str,
+        fiscal_year: int | None = None,
+        period: int | None = None,
+    ):
+        cfg = load_config()
+        pipelines = load_pipelines()
+        if pipeline_name not in pipelines:
+            raise SystemExit(f"Unknown pipeline '{pipeline_name}'. Available: {', '.join(sorted(pipelines.keys()))}")
+
+        p = pipelines[pipeline_name]
+        mapping = load_mapping(p.mapping_path)
+
+        if period is not None and fiscal_year is None:
+            raise SystemExit("--period requires --fy")
+
+        if fiscal_year is not None:
+            if pipeline_name in ('offers', 'sales_channel'):
+                # Both Offers and Sales Channel use 13-4 calendar dimensions.
+                if period is not None:
+                    if period < 1 or period > 13:
+                        raise SystemExit("--period must be between 1 and 13")
+                    slicer = (
+                        f"[13-4 Calendar].[d_Year].[d_Year].&[{int(fiscal_year)}],"
+                        f"[13-4 Calendar].[d_Period].[d_Period].&[{int(period)}]"
+                    )
+                else:
+                    slicer = f"[13-4 Calendar].[d_Year].[d_Year].&[{int(fiscal_year)}]"
+            else:
+                # Daily sales uses regular Calendar hierarchy
+                slicer = f"[Calendar].[Calendar Hierarchy].[Fiscal_Year].&[{int(fiscal_year)}]"
+
+            mdx = render_mdx_template(p.mdx, {"slicer": slicer})
+        elif length in ('1wk', '2wk'):
+            myview_id = 81 if length == '1wk' else 82
+            if pipeline_name == 'offers':
+                # Keep historical behavior (MyView + 13-4 All) as the default for offers.
+                slicer = (
+                    f"([MyView].[My View].[My View].&[{myview_id}],"
+                    "[13-4 Calendar].[Alternate Calendar Hierarchy].[All])"
+                )
+            else:
+                slicer = f"[MyView].[My View].[My View].&[{myview_id}]"
+
+            mdx = render_mdx_template(p.mdx, {"myview_id": myview_id, "slicer": slicer})
+        elif length == '2yr':
+            if pipeline_name == 'offers':
+                raise SystemExit("--length 2yr is not supported for offers")
+            mdx = p.mdx
+        else:
+            raise SystemExit(f"Unknown length '{length}'")
+
+        olap_server = os.getenv('OLAP_SERVER', cfg.get('olap', {}).get('server', 'https://ednacubes.papajohns.com:10502'))
+        olap_catalog = p.catalog or os.getenv('OLAP_CATALOG', cfg.get('olap', {}).get('catalog', 'OARS Franchise'))
+        olap_ssl_verify = bool(cfg.get('olap', {}).get('ssl_verify', False))
+        olap_username = get_secret('olap-username')
+        olap_password = get_secret('olap-password')
+
+        dv_creds = get_dataverse_credentials()
+        dataverse_url = dv_creds['environment_url']
+        client_id = dv_creds['client_id']
+        tenant_id = dv_creds['tenant_id']
+        client_secret = dv_creds['client_secret']
+
+        print(f"Running pipeline: {p.name}")
+        print(f"OLAP Catalog: {olap_catalog}")
+        print(f"Dataverse Table: {mapping.get('table')}")
+
+        if args.print_mdx:
+            print("\n--- Rendered MDX ---")
+            print(mdx)
+            print("--- End MDX ---\n")
+
+        dataverse_token = get_dataverse_access_token(dataverse_url, client_id, client_secret, tenant_id)
+        df = run_mdx_to_df(
+            xmla_server=olap_server,
+            catalog=olap_catalog,
+            username=olap_username,
+            password=olap_password,
+            mdx=mdx,
+            parser=p.parser,
+            ssl_verify=olap_ssl_verify,
+        )
+
+        if df is None or len(df) == 0:
+            raise SystemExit("No data returned from OLAP")
+
+        records = transform_df_to_records(df, mapping)
+        created, updated, errors = upsert_to_dataverse(dataverse_url, dataverse_token, mapping['table'], records)
+        return {"success": True, "records_created": created, "records_updated": updated, "errors": errors}
+
+    # If pipeline is explicitly provided, run it (advanced escape hatch).
+    if args.pipeline:
+        result = run_pipeline_by_name(args.pipeline, args.length, args.fy, args.period)
+        print(f"Done: {result['records_created']} created, {result['records_updated']} updated, {result['errors']} errors")
+        return 0 if result.get('success') else 1
     
-    # Determine the actual query type based on both mdx-query and mdx-length
-    if args.mdx_length == 'full':
-        # Full historical data for the specified query type
-        if args.mdx_query == 'daily_sales':
-            query_type = 'full_bi_data'
-        elif args.mdx_query == 'sales_channel':
-            query_type = 'sales_channel_full'  # Will need to implement
-        elif args.mdx_query == 'offers':
-            query_type = 'offers_full' # Will need to implement
-        else:
-            query_type = 'full_bi_data'
-    elif args.mdx_length == '1_week':
-        # 1 week of data (MyView 81)
-        if args.mdx_query == 'daily_sales':
-            query_type = 'last_1_week'
-        elif args.mdx_query == 'sales_channel':
-            query_type = 'sales_channel_daily'
-        elif args.mdx_query == 'offers':
-            query_type = 'offers_daily'
-        else:
-            query_type = 'last_1_week'
-    else:  # 2_week
-        # 2 weeks of data (MyView 82)
-        if args.mdx_query == 'daily_sales':
-            query_type = 'last_2_weeks'
-        elif args.mdx_query == 'sales_channel':
-            query_type = 'sales_channel_2weeks'  # Will need to implement
-        elif args.mdx_query == 'offers':
-            query_type = 'offers_2weeks'
-        else:
-            query_type = 'last_2_weeks'
+    send_email = (args.email == 'yes')
     
-    send_email = (args.send_email == 'yes')
+    # Determine the actual mode being used
+    if args.fy is not None:
+        if args.period is not None:
+            mode_description = f"FY{args.fy} Period {args.period}"
+        else:
+            mode_description = f"FY{args.fy} (full year)"
+    else:
+        mode_description = args.length
     
     print("="*80)
     print("OLAP to Dataverse Sync (using Azure Key Vault)")
-    print(f"MDX Query Type: {args.mdx_query}")
-    if args.mdx_query == 'daily_sales':
-        print(f"MDX Length: {args.mdx_length}")
-    print(f"Send Email: {args.send_email}")
+    print(f"Query: {args.query}")
+    print(f"Mode: {mode_description}")
+    print(f"Email: {args.email}")
     print("="*80)
     print()
     
@@ -502,72 +611,36 @@ def main():
         print("✓ Key Vault configured (credentials loaded on-demand)")
         print()
         
-        # Run the appropriate sync based on query type
-        if args.mdx_query == 'all':
-            # Sync all query types
+        # Route queries through the config-driven pipelines for a consistent interface.
+        query_to_pipeline = {
+            'daily': 'daily_sales',
+            'sales_channel': 'sales_channel',
+            'offers': 'offers',
+        }
+
+        if args.query == 'all':
             print("🔄 Syncing all query types...\n")
             results = []
-            
-            # 1. Daily Sales
-            print("=" * 80)
-            print("1. Syncing Daily Sales (OARS BI Data)")
-            print("=" * 80)
-            if args.mdx_length == 'full':
-                ds_query_type = 'full_bi_data'
-            elif args.mdx_length == '1_week':
-                ds_query_type = 'last_1_week'
-            else:
-                ds_query_type = 'last_2_weeks'
-            result_ds = query_olap_and_sync_to_dataverse(query_type=ds_query_type)
-            results.append(('daily_sales', result_ds))
-            
-            # 2. Sales Channel
-            print("\n" + "=" * 80)
-            print("2. Syncing Sales Channel Daily")
-            print("=" * 80)
-            result_sc = query_sales_channel_daily_and_sync()
-            results.append(('sales_channel', result_sc))
-            
-            # 3. Offers
-            print("\n" + "=" * 80)
-            print("3. Syncing Offers")
-            print("=" * 80)
-            days = 7 if args.mdx_length == '1_week' else 14
-            result_offers = query_offers_and_sync(days=days)
-            results.append(('offers', result_offers))
-            
-            # Aggregate results
-            total_created = sum(r[1].get('records_created', 0) for r in results if r[1].get('success'))
-            total_updated = sum(r[1].get('records_updated', 0) for r in results if r[1].get('success'))
-            total_errors = sum(r[1].get('errors', 0) for r in results if r[1].get('success'))
-            all_success = all(r[1].get('success', False) for r in results)
-            
+            for q in ['daily', 'sales_channel', 'offers']:
+                print("=" * 80)
+                print(f"Syncing {q}...")
+                print("=" * 80)
+                results.append((q, run_pipeline_by_name(query_to_pipeline[q], args.length, args.fy, args.period)))
+
+            total_created = sum(r[1].get('records_created', 0) for r in results)
+            total_updated = sum(r[1].get('records_updated', 0) for r in results)
+            total_errors = sum(r[1].get('errors', 0) for r in results)
+
             result = {
-                'success': all_success,
+                'success': all(r[1].get('success', False) for r in results),
                 'records_created': total_created,
                 'records_updated': total_updated,
                 'errors': total_errors,
-                'details': results
+                'details': results,
             }
-            
-            print("\n" + "=" * 80)
-            print("✅ ALL SYNCS COMPLETE")
-            print("=" * 80)
-            for query_name, query_result in results:
-                status = "✓" if query_result.get('success') else "✗"
-                print(f"{status} {query_name}: {query_result.get('records_updated', 0)} records")
-            
-        elif args.mdx_query == 'sales_channel':
-            # Use the dedicated Sales Channel Daily sync function
-            # TODO: Add support for different time ranges (1_week, 2_week, full)
-            result = query_sales_channel_daily_and_sync()
-        elif args.mdx_query == 'offers':
-            # Use the dedicated Offers sync function
-            days = 7 if args.mdx_length == '1_week' else 14
-            result = query_offers_and_sync(days=days)
         else:
-            # Use the standard OARS BI Data sync function
-            result = query_olap_and_sync_to_dataverse(query_type=query_type)
+            pipeline_name = query_to_pipeline[args.query]
+            result = run_pipeline_by_name(pipeline_name, args.length, args.fy, args.period)
 
         
         # Send email notification if requested
@@ -580,8 +653,8 @@ def main():
 OLAP to Dataverse sync completed successfully.
 
 Summary:
-- MDX Query Type: {args.mdx_query}
-- MDX Length: {args.mdx_length if args.mdx_query == 'daily_sales' else 'N/A'}
+            - Query: {args.query}
+            - Length: {args.length}
 - Records Created: {result.get('records_created', 0)}
 - Records Updated: {result.get('records_updated', 0)}
 - Errors: {result.get('errors', 0)}
@@ -595,8 +668,8 @@ The data has been synchronized to Dataverse.
 OLAP to Dataverse sync failed.
 
 Error: {result.get('error', 'Unknown error')}
-MDX Query Type: {args.mdx_query}
-MDX Length: {args.mdx_length if args.mdx_query == 'daily_sales' else 'N/A'}
+Query: {args.query}
+Length: {args.length}
 Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 
 Please check the logs for more details.
@@ -626,8 +699,8 @@ Please check the logs for more details.
 OLAP to Dataverse sync encountered an unexpected error.
 
 Error: {str(e)}
-MDX Query Type: {args.mdx_query}
-MDX Length: {args.mdx_length if args.mdx_query == 'daily_sales' else 'N/A'}
+            Query: {args.query}
+            Length: {args.length}
 Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 
 Stack trace:

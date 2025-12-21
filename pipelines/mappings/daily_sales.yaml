@@ -1,0 +1,188 @@
+table: crf63_oarsbidatas
+alternate_key: crf63_businesskey
+
+business_key:
+  format: "{StoreNumber}_{CalendarDate:%Y%m%d}"
+
+fields:
+  StoreNumber:
+    dataverse: crf63_storenumber
+    type: string
+  CalendarDate:
+    dataverse: crf63_calendardate
+    type: date
+
+# Metadata fields (auto-populated)
+metadata:
+  name:
+    dataverse: crf63_name
+    type: string
+  datasource:
+    dataverse: crf63_datasource
+    type: string
+  lastrefreshed:
+    dataverse: crf63_lastrefreshed
+    type: datetime
+
+# All measures from OARS Franchise cube
+measures:
+  # Sales Metrics (4)
+  "TY Net Sales USD":
+    dataverse: crf63_tynetsales
+    type: decimal
+  "L2Y Comp Net Sales USD":
+    dataverse: crf63_l2ycompsales
+    type: decimal
+  "L3Y Comp Net Sales USD":
+    dataverse: crf63_l3ycompsales
+    type: decimal
+  "LY Comp Net Sales USD":
+    dataverse: crf63_lycompsales
+    type: decimal
+
+  # Cost Metrics (6)
+  "TY Target Food Cost USD":
+    dataverse: crf63_targetfoodcost
+    type: decimal
+  "Actual Food Cost USD":
+    dataverse: crf63_actualfoodcost
+    type: decimal
+  "FLMD USD":
+    dataverse: crf63_flmd
+    type: decimal
+  "Actual Labor $ USD":
+    dataverse: crf63_actuallabor
+    type: decimal
+  "Mileage Cost Local":
+    dataverse: crf63_mileagecost
+    type: decimal
+  "Discounts USD":
+    dataverse: crf63_discounts
+    type: decimal
+
+  # Operations Metrics (6)
+  "HS Total Actual Hours":
+    dataverse: crf63_totalhours
+    type: decimal
+  "Store Days":
+    dataverse: crf63_storedays
+    type: int
+  "Make Time Minutes":
+    dataverse: crf63_maketime
+    type: decimal
+  "Rack Time Minutes":
+    dataverse: crf63_racktime
+    type: decimal
+  "Total OTD Time (Hours)":
+    dataverse: crf63_otdtime
+    type: decimal
+  "Avg TTDT":
+    dataverse: crf63_avgttdt
+    type: decimal
+
+  # Order Metrics (6)
+  "TY Orders":
+    dataverse: crf63_tyorders
+    type: int
+  "LY Orders":
+    dataverse: crf63_lyorders
+    type: int
+  "Deliveries":
+    dataverse: crf63_deliveries
+    type: int
+  "BOZOCORO Orders":
+    dataverse: crf63_bozocoroorders
+    type: int
+  "OTD Order Count":
+    dataverse: crf63_otdordercount
+    type: int
+  "TY Dispatched Delivery Orders":
+    dataverse: crf63_dispatchedorders
+    type: int
+
+  # Financial Metrics (5)
+  "Target Profit after FLM Local (Fran)":
+    dataverse: crf63_targetprofit
+    type: decimal
+  "Actual FLM w/o Vacation Accrual Local":
+    dataverse: crf63_actualflm
+    type: decimal
+  "FLMDPC USD (Fran)":
+    dataverse: crf63_flmdpc
+    type: decimal
+  "m_ty_agg_commission_local_sum":
+    dataverse: crf63_commission
+    type: decimal
+  "Total Cash Over/Short USD":
+    dataverse: crf63_cashovershort
+    type: decimal
+
+  # Customer Satisfaction Metrics (6)
+  "TY Total OSAT Survey Count":
+    dataverse: crf63_osatsurveycount
+    type: int
+  "TY OSAT Satisfied Survey Count":
+    dataverse: crf63_osatsatisfied
+    type: int
+  "TY Total Order Accuracy Survey Count":
+    dataverse: crf63_accuracysurveycount
+    type: int
+  "Order Accuracy %":
+    dataverse: crf63_orderaccuracypct
+    type: decimal
+  "Total Calls":
+    dataverse: crf63_totalcalls
+    type: int
+  "Answered Calls":
+    dataverse: crf63_answeredcalls
+    type: int
+
+  # Service Metrics - SMG (4)
+  "SMG Avg Closure":
+    dataverse: crf63_smgavgclosure
+    type: decimal
+  "SMG Cases Opened":
+    dataverse: crf63_smgcasesopened
+    type: int
+  "SMG Cases Resolved":
+    dataverse: crf63_smgcasesresolved
+    type: int
+  "SMG Value %":
+    dataverse: crf63_smgvaluepct
+    type: decimal
+
+  # Service Metrics - Delivery Performance (4)
+  "Singles":
+    dataverse: crf63_singles
+    type: int
+  "Doubles":
+    dataverse: crf63_doubles
+    type: int
+  "Triples Plus":
+    dataverse: crf63_triplesplus
+    type: int
+  "Runs":
+    dataverse: crf63_runs
+    type: int
+
+  # Service Metrics - TTDT (3)
+  "TTDT Orders":
+    dataverse: crf63_ttdtorders
+    type: int
+  "To The Door Time for Dispatch Orders":
+    dataverse: crf63_todoortimedispatch
+    type: decimal
+  "To The Door Time Minutes":
+    dataverse: crf63_todoortimeminutes
+    type: decimal
+
+  # Service Metrics - Taste Surveys (3)
+  "TY Taste Of Food Good Survey Count":
+    dataverse: crf63_tasteoffoodgood
+    type: int
+  "TY Total Taste Of Food Survey Count":
+    dataverse: crf63_tasteoffoodtotal
+    type: int
+  "TY Order Accuracy Good Survey Count":
+    dataverse: crf63_orderaccuracygood
+    type: int
