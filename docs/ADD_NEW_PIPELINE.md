@@ -375,27 +375,21 @@ Once tested:
 python olap_to_dataverse.py --pipeline your_pipeline_name --length 1wk
 ```
 
-### Option B: Use pipeline name directly with --query
+### Option B: Use pipeline name directly with --query (Recommended)
 
-**New in v2.0**: Pipeline names are now automatically available as `--query` options!
+Pipeline names are automatically available as `--query` options!
 
 ```bash
-# Use the pipeline name directly (recommended)
+# Use the pipeline name directly
 python olap_to_dataverse.py --query your_pipeline_name --length 1wk
 ```
 
-The `--query` parameter now accepts any pipeline name from `pipelines.yaml`. No Python code changes needed!
+The `--query` parameter accepts any pipeline name from `pipelines.yaml`. No Python code changes needed!
 
 **Example**: If your pipeline is named `store_daily_metrics` in `pipelines.yaml`:
 ```bash
 python olap_to_dataverse.py --query store_daily_metrics --length 1wk
 ```
-
-**Note**: For backward compatibility, legacy query names still work:
-- `--query daily` → maps to `daily_sales` pipeline
-- `--query sales_channel` → maps to `sales_channel` pipeline
-- `--query offers` → maps to `offers` pipeline
-- `--query inventory` → maps to `inventory` pipeline
 
 ---
 

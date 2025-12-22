@@ -196,18 +196,10 @@ def main():
     pipelines = load_pipelines()
     available_pipelines = list(pipelines.keys())
     
-    # Legacy aliases for backward compatibility
-    legacy_aliases = {
-        'daily': 'daily_sales',
-        # 'sales_channel' maps to itself
-        # 'offers' maps to itself  
-        # 'inventory' maps to itself
-    }
-    
     parser = argparse.ArgumentParser(description='Sync OLAP data to Dataverse')
     parser.add_argument(
         '--query',
-        choices=available_pipelines + ['all'] + list(legacy_aliases.keys()),
+        choices=available_pipelines + ['all'],
         default='daily_sales',
         help=f'Pipeline to sync. Available: {", ".join(available_pipelines)}, or "all" for all pipelines'
     )
@@ -409,9 +401,7 @@ def main():
             }
         else:
             # Use pipeline name directly from --query argument
-            # Handle legacy aliases for backward compatibility
-            pipeline_name = legacy_aliases.get(args.query, args.query)
-            result = run_pipeline_by_name(pipeline_name, args.length, args.fy, args.period)
+            result = run_pipeline_by_name(args.query, args.length, args.fy, args.period)
 
         
         # Send email notification if requested
