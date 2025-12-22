@@ -5,6 +5,9 @@
 		},
 		{
 			"path": "../Beachwood-Data-Integration"
+		},
+		{
+			"path": "../Beachwood-PowerBI"
 		}
 	],
 	"settings": {}

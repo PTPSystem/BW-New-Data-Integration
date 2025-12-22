@@ -8,258 +8,17 @@ from dotenv import load_dotenv
 # Import local modules
 from modules.utils.keyvault import get_secret, get_dataverse_credentials
 from modules.utils.config import load_config
-from modules.olap import execute_xmla_mdx, parse_xmla_celldata_response, parse_sales_channel_daily_response, parse_offers_response
 from modules.dataverse import get_dataverse_access_token, upsert_to_dataverse
 from modules.notifications import send_email_notification
-from modules.mdx_queries import get_sample_mdx_queries, get_sales_channel_daily_mdx, get_offers_mdx, get_daily_sales_mdx
-from modules.transformers import transform_olap_to_dataverse_records, transform_sales_channel_daily_records, transform_offers_records
 from modules.pipeline_config import load_pipelines, load_mapping, render_mdx_template
 from modules.pipeline_runner import run_mdx_to_df, transform_df_to_records
 import pandas as pd
 
 load_dotenv()
 
-def query_sales_channel_daily_and_sync(config=None, logger=None):
-    """
-    Query Sales Channel Daily data from OLAP and sync to Dataverse.
-    
-    Table: crf63_saleschanneldaily (Sales Channel Daily)
-    """
-    def log(msg):
-        if logger:
-            logger.info(msg)
-        else:
-            print(msg)
-    
-    log("="*80)
-    log("Sales Channel Daily - OLAP to Dataverse Sync")
-    log("="*80)
-    
-    # Get OLAP configuration from Key Vault
-    olap_server = os.getenv('OLAP_SERVER', 'https://ednacubes.papajohns.com:10502')
-    olap_catalog = os.getenv('OLAP_CATALOG', 'OARS Franchise')
-    olap_username = get_secret('olap-username')
-    olap_password = get_secret('olap-password')
-    olap_ssl_verify = False  # Self-signed cert
-    
-    # Get Dataverse configuration from Key Vault
-    dv_creds = get_dataverse_credentials()
-    dataverse_url = dv_creds['environment_url']
-    client_id = dv_creds['client_id']
-    tenant_id = dv_creds['tenant_id']
-    client_secret = dv_creds['client_secret']
-    
-    # Table for Sales Channel Daily data
-    table_name = "crf63_saleschanneldailies"  # Plural form for API
-    
-    log(f"\nOLAP Server: {olap_server}")
-    log(f"OLAP Catalog: {olap_catalog}")
-    log(f"Dataverse URL: {dataverse_url}")
-    log(f"Table: {table_name}")
-    
-    # Step 1: Get Dataverse access token
-    log("\n1. Getting Dataverse access token...")
-    dataverse_token = get_dataverse_access_token(dataverse_url, client_id, client_secret, tenant_id, logger)
-    
-    if not dataverse_token:
-        log("✗ Failed to get Dataverse access token")
-        return {"success": False, "error": "Failed to get Dataverse token"}
-    
-    # Step 2: Query OLAP cube for Sales Channel Daily
-    log("\n2. Querying OLAP cube (Sales Channel Daily)...")
-    
-    mdx_query = get_sales_channel_daily_mdx()
-    log("   Using MyView 81 (1 week / 7 days filter)")
-    
-    try:
-        xml_response = execute_xmla_mdx(
-            olap_server,
-            olap_catalog,
-            olap_username,
-            olap_password,
-            mdx_query,
-            ssl_verify=olap_ssl_verify,
-            logger=logger
-        )
-        
-        log(f"   ✓ Query executed ({len(xml_response)} bytes)")
-        
-        # Parse the response using the 5-dimension parser
-        df = parse_sales_channel_daily_response(xml_response, logger=logger)
-        
-        if df is None or len(df) == 0:
-            log("⚠  Query returned no data")
-            return {"success": False, "error": "No data returned from OLAP"}
-        
-        log(f"   ✓ Parsed {len(df)} rows")
-        
-    except Exception as e:
-        log(f"   ✗ Query failed: {e}")
-        log(traceback.format_exc())
-        return {"success": False, "error": str(e)}
-    
-    log(f"   Columns: {list(df.columns)}")
-    log(f"\n   Sample data:")
-    log(df.head().to_string())
-    
-    # Step 3: Transform data for Dataverse
-    log("\n3. Transforming data for Dataverse...")
-    
-    records = transform_sales_channel_daily_records(df, logger)
-    
-    log(f"✓ Transformed {len(records)} records")
-    
-    # Debug: Show first record
-    if records:
-        log(f"   First record business key: {records[0].get('crf63_businesskey', 'MISSING')}")
-    
-    # Step 4: Upsert to Dataverse
-    log("\n4. Upserting to Dataverse...")
-    created, updated, errors = upsert_to_dataverse(
-        dataverse_url,
-        dataverse_token,
-        table_name,
-        records,
-        logger
-    )
-    
-    log("\n" + "="*80)
-    log("✅ Sales Channel Daily Sync Complete!")
-    log("="*80)
-    log(f"  Records created: {created}")
-    log(f"  Records updated: {updated}")
-    log(f"  Errors: {errors}")
-    
-    return {
-        "success": True,
-        "records_created": created,
-        "records_updated": updated,
-        "errors": errors
-    }
-
-def query_offers_and_sync(config=None, logger=None, days=7):
-    """
-    Query Offers data from OLAP and sync to Dataverse.
-    
-    Table: crf63_offers (Offers)
-    """
-    def log(msg):
-        if logger:
-            logger.info(msg)
-        else:
-            print(msg)
-    
-    log("="*80)
-    log("Offers - OLAP to Dataverse Sync")
-    log("="*80)
-    
-    # Get OLAP configuration from Key Vault
-    olap_server = os.getenv('OLAP_SERVER', 'https://ednacubes.papajohns.com:10502')
-    olap_catalog = os.getenv('OLAP_CATALOG_OFFERS', 'Offers')  # Note: Different catalog for Offers
-    olap_username = get_secret('olap-username')
-    olap_password = get_secret('olap-password')
-    olap_ssl_verify = False  # Self-signed cert
-    
-    # Get Dataverse configuration from Key Vault
-    dv_creds = get_dataverse_credentials()
-    dataverse_url = dv_creds['environment_url']
-    client_id = dv_creds['client_id']
-    tenant_id = dv_creds['tenant_id']
-    client_secret = dv_creds['client_secret']
-    
-    # Table for Offers data
-    # The table name for API calls should be the plural collection name
-    # In create_offers_table.py, we set CollectionName to "crf63_offerses" (implicitly or explicitly)
-    # Let's verify what the collection name actually is.
-    # Usually it's schema name + 'es' or 's'.
-    # If schema is crf63_offers, collection is likely crf63_offerses.
-    table_name = "crf63_offerses"
-    
-    log(f"\nOLAP Server: {olap_server}")
-    log(f"OLAP Catalog: {olap_catalog}")
-    log(f"Dataverse URL: {dataverse_url}")
-    log(f"Table: {table_name}")
-    
-    # Step 1: Get Dataverse access token
-    log("\n1. Getting Dataverse access token...")
-    dataverse_token = get_dataverse_access_token(dataverse_url, client_id, client_secret, tenant_id, logger)
-    
-    if not dataverse_token:
-        log("✗ Failed to get Dataverse access token")
-        return {"success": False, "error": "Failed to get Dataverse token"}
-    
-    # Step 2: Query OLAP cube for Offers
-    log("\n2. Querying OLAP cube (Offers)...")
-    
-    mdx_query = get_offers_mdx(days=days)
-    week_label = "1 week" if days == 7 else "2 weeks"
-    log(f"   Using MyView (last {week_label})")
-    
-    try:
-        xml_response = execute_xmla_mdx(
-            olap_server,
-            olap_catalog,
-            olap_username,
-            olap_password,
-            mdx_query,
-            ssl_verify=olap_ssl_verify,
-            logger=logger
-        )
-        
-        log(f"   ✓ Query executed ({len(xml_response)} bytes)")
-        
-        # Parse the response using the Offers parser
-        df = parse_offers_response(xml_response, logger=logger)
-        
-        if df is None or len(df) == 0:
-            log("⚠  Query returned no data")
-            return {"success": False, "error": "No data returned from OLAP"}
-        
-        log(f"   ✓ Parsed {len(df)} rows")
-        
-    except Exception as e:
-        log(f"   ✗ Query failed: {e}")
-        log(traceback.format_exc())
-        return {"success": False, "error": str(e)}
-    
-    log(f"   Columns: {list(df.columns)}")
-    log(f"\n   Sample data:")
-    log(df.head().to_string())
-    
-    # Step 3: Transform data for Dataverse
-    log("\n3. Transforming data for Dataverse...")
-    
-    records = transform_offers_records(df, logger)
-    
-    log(f"✓ Transformed {len(records)} records")
-    
-    # Debug: Show first record
-    if records:
-        log(f"   First record business key: {records[0].get('crf63_businesskey', 'MISSING')}")
-    
-    # Step 4: Upsert to Dataverse
-    log("\n4. Upserting to Dataverse...")
-    created, updated, errors = upsert_to_dataverse(
-        dataverse_url,
-        dataverse_token,
-        table_name,
-        records,
-        logger
-    )
-    
-    log("\n" + "="*80)
-    log("✅ Offers Sync Complete!")
-    log("="*80)
-    log(f"  Records created: {created}")
-    log(f"  Records updated: {updated}")
-    log(f"  Errors: {errors}")
-    
-    return {
-        "success": True,
-        "records_created": created,
-        "records_updated": updated,
-        "errors": errors
-    }
+# All legacy query functions (query_sales_channel_daily_and_sync, query_offers_and_sync, etc.)
+# have been replaced by the config-driven pipeline system in run_pipeline_by_name().
+# See pipelines/pipelines.yaml for pipeline definitions.
 
 def query_olap_and_sync_to_dataverse(config=None, logger=None, query_type='full_bi_data'):
 
@@ -436,9 +195,9 @@ def main():
     parser = argparse.ArgumentParser(description='Sync OLAP data to Dataverse')
     parser.add_argument(
         '--query',
-        choices=['daily', 'offers', 'sales_channel', 'all'],
+        choices=['daily', 'offers', 'sales_channel', 'inventory', 'all'],
         default='daily',
-        help='What to sync: daily, offers, sales_channel, or all'
+        help='What to sync: daily, offers, sales_channel, inventory, or all'
     )
     parser.add_argument(
         '--length',
@@ -569,6 +328,7 @@ def main():
             password=olap_password,
             mdx=mdx,
             parser=p.parser,
+            hierarchy_mappings=p.hierarchy_mappings,
             ssl_verify=olap_ssl_verify,
         )
 
@@ -576,7 +336,8 @@ def main():
             raise SystemExit("No data returned from OLAP")
 
         records = transform_df_to_records(df, mapping)
-        created, updated, errors = upsert_to_dataverse(dataverse_url, dataverse_token, mapping['table'], records)
+        alternate_key = mapping.get('alternate_key', 'crf63_businesskey')
+        created, updated, errors = upsert_to_dataverse(dataverse_url, dataverse_token, mapping['table'], records, alternate_key)
         return {"success": True, "records_created": created, "records_updated": updated, "errors": errors}
 
     # If pipeline is explicitly provided, run it (advanced escape hatch).
@@ -616,12 +377,13 @@ def main():
             'daily': 'daily_sales',
             'sales_channel': 'sales_channel',
             'offers': 'offers',
+            'inventory': 'inventory',
         }
 
         if args.query == 'all':
             print("🔄 Syncing all query types...\n")
             results = []
-            for q in ['daily', 'sales_channel', 'offers']:
+            for q in ['daily', 'sales_channel', 'offers', 'inventory']:
                 print("=" * 80)
                 print(f"Syncing {q}...")
                 print("=" * 80)

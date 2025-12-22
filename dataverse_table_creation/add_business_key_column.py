@@ -1,22 +1,32 @@
 #!/usr/bin/env python3
 """
-Add business key column to existing crf63_oarsbidata table.
+Add business key column to existing Dataverse table.
 
-Business Key Format: {StoreNumber}_{YYYYMMDD}
-Example: 4280_20250115
+Business Key Format: Varies by table
+Example for oarsbidata: {StoreNumber}_{YYYYMMDD}
 
 This column will be used for efficient upsert operations.
+
+Usage:
+    python add_business_key_column.py [table_name]
+    
+Examples:
+    python add_business_key_column.py crf63_oarsbidata
+    python add_business_key_column.py crf63_inventories
 """
 
 import msal
 import requests
+import sys
 
 # Configuration
 TENANT_ID = "c8b6ba98-3fc0-4153-83a9-01374492c0f5"
 # Use well-known Azure PowerShell client ID for interactive auth (has redirect URIs configured)
 CLIENT_ID = "51f81489-12ee-4a9e-aaae-a2591f45987d"
 DATAVERSE_ENVIRONMENT = "https://orgbf93e3c3.crm.dynamics.com"
-TABLE_LOGICAL_NAME = "crf63_oarsbidata"
+
+# Get table name from command line argument, default to crf63_oarsbidata
+TABLE_LOGICAL_NAME = sys.argv[1] if len(sys.argv) > 1 else "crf63_oarsbidata"
 
 def get_access_token():
     """Get access token using interactive browser authentication."""
@@ -117,6 +127,9 @@ def add_business_key_column(access_token):
         print(f"   Column: crf63_businesskey (String, 50 chars)")
         print(f"   Format: {{StoreNumber}}_{{YYYYMMDD}}")
         print(f"   Example: 4280_20250115")
+        return True
+    elif response.status_code == 400 and "already exists" in response.text:
+        print("ℹ️  Business key column already exists - skipping creation")
         return True
     else:
         print(f"❌ Failed to create column: {response.status_code}")

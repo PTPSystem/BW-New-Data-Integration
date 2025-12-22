@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import yaml
 
@@ -14,6 +14,7 @@ class PipelineDefinition:
     parser: str
     mapping_path: str
     catalog: Optional[str] = None
+    hierarchy_mappings: Optional[List[Dict[str, str]]] = None
 
 
 def render_mdx_template(mdx: str, variables: Dict[str, Any] | None = None) -> str:
@@ -54,6 +55,7 @@ def load_pipelines(pipelines_file: str | None = None) -> Dict[str, PipelineDefin
         parser = cfg.get("parser")
         mapping = cfg.get("mapping")
         catalog = cfg.get("catalog")
+        hierarchy_mappings = cfg.get("hierarchy_mappings")
         if not mdx:
             raise ValueError(f"Pipeline '{name}' is missing mdx")
         if not parser:
@@ -71,6 +73,7 @@ def load_pipelines(pipelines_file: str | None = None) -> Dict[str, PipelineDefin
             parser=str(parser),
             mapping_path=mapping_path,
             catalog=str(catalog) if catalog else None,
+            hierarchy_mappings=hierarchy_mappings,
         )
 
     return out

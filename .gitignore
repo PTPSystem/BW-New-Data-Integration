@@ -56,3 +56,8 @@ docker-compose.override.yml
 # Local artifacts
 Old Excels/
 *.xlsx
+
+# Archives and debug files
+.archive/
+*.xml
+!docker-compose*.xml

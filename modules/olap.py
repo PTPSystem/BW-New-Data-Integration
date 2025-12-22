@@ -402,3 +402,124 @@ def parse_offers_response(xml_response, logger=None):
         traceback.print_exc()
         return None
 
+
+def parse_inventory_response(xml_response, logger=None):
+    """
+    Parse XMLA response for Inventory query (measure on COLUMNS, 4 dimensions on ROWS).
+    
+    Args:
+        xml_response: XML string from XMLA Execute response
+        logger: Optional logger
+    
+    Returns:
+        pandas DataFrame with columns:
+        - ItemNumber, CalendarDate, StoreNumber, ItemDescription (dimensions)
+        - Qty On Hand (measure)
+    """
+    def log(msg):
+        if logger:
+            logger.info(msg)
+        else:
+            print(msg)
+    
+    try:
+        root = ET.fromstring(xml_response)
+        
+        # Define namespaces
+        ns = {
+            'soap': 'http://schemas.xmlsoap.org/soap/envelope/',
+            'xmla': 'urn:schemas-microsoft-com:xml-analysis',
+            'mdd': 'urn:schemas-microsoft-com:xml-analysis:mddataset'
+        }
+        
+        # Find the root element
+        root_elem = root.find('.//mdd:root', ns)
+        if root_elem is None:
+            log("   Could not find mddataset:root element")
+            return None
+        
+        # Extract axis info
+        axes = root_elem.find('mdd:Axes', ns)
+        cell_data = root_elem.find('mdd:CellData', ns)
+        
+        if axes is None or cell_data is None:
+            log("   Missing Axes or CellData elements")
+            return None
+        
+        # Parse Column Axis (Axis0 - Measures)
+        axis0 = axes.find('.//mdd:Axis[@name="Axis0"]', ns)
+        measure_names = []
+        if axis0 is not None:
+            for tuple_elem in axis0.findall('.//mdd:Tuple', ns):
+                for member in tuple_elem.findall('.//mdd:Member', ns):
+                    caption = member.find('mdd:Caption', ns)
+                    if caption is not None:
+                        measure_names.append(caption.text)
+        
+        log(f"   Found {len(measure_names)} measures")
+        
+        # Parse Row Axis (Axis1 - ItemNumber × Date × Store × ItemDescription)
+        axis1 = axes.find('.//mdd:Axis[@name="Axis1"]', ns)
+        row_tuples = []
+        if axis1 is not None:
+            for tuple_elem in axis1.findall('.//mdd:Tuple', ns):
+                row_info = {}
+                members = tuple_elem.findall('.//mdd:Member', ns)
+                for member in members:
+                    hierarchy = member.get('Hierarchy', '')
+                    caption_elem = member.find('mdd:Caption', ns)
+                    caption = caption_elem.text if caption_elem is not None else ''
+                    
+                    # Map hierarchies to dimension columns
+                    if 'Item_Number' in hierarchy:
+                        row_info['ItemNumber'] = caption
+                    elif 'Calendar' in hierarchy or 'Date' in hierarchy:
+                        row_info['CalendarDate'] = caption
+                    elif 'Store' in hierarchy:
+                        row_info['StoreNumber'] = caption
+                    elif 'Item_Description' in hierarchy or 'Description' in hierarchy:
+                        row_info['ItemDescription'] = caption
+                
+                row_tuples.append(row_info)
+        
+        log(f"   Found {len(row_tuples)} row tuples")
+        
+        # Parse Cells
+        cells = {}
+        for cell in cell_data.findall('.//mdd:Cell', ns):
+            ordinal = int(cell.get('CellOrdinal', -1))
+            value_elem = cell.find('mdd:Value', ns)
+            value = value_elem.text if value_elem is not None else None
+            cells[ordinal] = value
+        
+        log(f"   Found {len(cells)} cell values")
+        
+        # Build DataFrame: Map cells to rows
+        # CellOrdinal = row_idx * num_measures + col_idx
+        num_measures = len(measure_names)
+        rows = []
+        
+        for row_idx, row_info in enumerate(row_tuples):
+            row_data = row_info.copy()
+            
+            for col_idx, measure_name in enumerate(measure_names):
+                ordinal = row_idx * num_measures + col_idx
+                value = cells.get(ordinal)
+                row_data[measure_name] = value
+            
+            rows.append(row_data)
+        
+        log(f"   Built {len(rows)} data rows")
+        
+        if rows:
+            df = pd.DataFrame(rows)
+            return df
+        else:
+            log("   No data rows built")
+            return None
+            
+    except Exception as e:
+        log(f"   Error parsing Inventory response: {e}")
+        traceback.print_exc()
+        return None
+

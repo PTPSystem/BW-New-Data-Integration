@@ -11,13 +11,21 @@ from modules.olap import (
     parse_xmla_celldata_response,
     parse_sales_channel_daily_response,
     parse_offers_response,
+    parse_inventory_response,
 )
+from modules.generic_xmla_parser import GenericXMLAParser
+
+
+# Legacy custom parsers - kept for backward compatibility and as fallback.
+# These are no longer used by default when hierarchy_mappings are provided.
+# See modules/generic_xmla_parser.py for the unified generic parser.
 
 
 _PARSERS = {
     "celldata": parse_xmla_celldata_response,
     "sales_channel_daily": parse_sales_channel_daily_response,
     "offers": parse_offers_response,
+    "inventory": parse_inventory_response,
 }
 
 
@@ -29,9 +37,27 @@ def run_mdx_to_df(
     password: str,
     mdx: str,
     parser: str,
+    hierarchy_mappings: Optional[List[Dict[str, str]]] = None,
     ssl_verify: bool = False,
     logger=None,
 ) -> pd.DataFrame:
+    # If hierarchy_mappings provided, use generic parser
+    if hierarchy_mappings:
+        xml = execute_xmla_mdx(
+            xmla_server,
+            catalog,
+            username,
+            password,
+            mdx,
+            ssl_verify=ssl_verify,
+            logger=logger,
+        )
+        
+        generic_parser = GenericXMLAParser(hierarchy_mappings)
+        df = generic_parser.parse_response(xml, logger=logger)
+        return df if df is not None else pd.DataFrame()
+    
+    # Otherwise, use legacy custom parsers
     parse_fn = _PARSERS.get(parser)
     if not parse_fn:
         raise ValueError(f"Unknown parser '{parser}'. Known: {sorted(_PARSERS.keys())}")

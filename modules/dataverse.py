@@ -7,6 +7,7 @@ import concurrent.futures
 import re
 import json as json_module
 from datetime import datetime
+from urllib.parse import quote
 
 def get_dataverse_access_token(environment_url, client_id, client_secret, tenant_id, logger=None):
     """Obtain an access token for Dataverse."""
@@ -36,7 +37,7 @@ def get_dataverse_access_token(environment_url, client_id, client_secret, tenant
         log(f"Error obtaining Dataverse access token: {e}")
         return None
 
-def upsert_to_dataverse(environment_url, access_token, table_name, records, logger=None):
+def upsert_to_dataverse(environment_url, access_token, table_name, records, alternate_key="crf63_businesskey", logger=None):
     """
     ULTRA-FAST upsert using optimized batch method from load_csv.py.
     Achieves 1,800–2,600 rows/sec on production Dataverse environments.
@@ -51,7 +52,7 @@ def upsert_to_dataverse(environment_url, access_token, table_name, records, logg
     batch_url = f"{api_url}/$batch"
 
     # Filter valid records
-    valid_records = [r for r in records if r.get("crf63_businesskey")]
+    valid_records = [r for r in records if r.get(alternate_key)]
     total = len(valid_records)
     if total == 0:
         log("No valid records to upsert")
@@ -64,14 +65,18 @@ def upsert_to_dataverse(environment_url, access_token, table_name, records, logg
     session.headers.update({"Authorization": f"Bearer {access_token}"})
 
     # Build batch function (binary encoding for speed)
+    debug_first_batch = True
     def build_batch(batch_records):
+        nonlocal debug_first_batch
         batch_id = str(uuid.uuid4())
         changeset_id = str(uuid.uuid4())
         parts = [f"--{batch_id}\r\nContent-Type: multipart/mixed;boundary={changeset_id}\r\n\r\n".encode()]
 
         for i, rec in enumerate(batch_records, 1):
             clean_rec = {k: v for k, v in rec.items() if v is not None}
-            key = clean_rec["crf63_businesskey"].replace("'", "''")
+            key_value = clean_rec[alternate_key]
+            # Try WITHOUT URL encoding - just escape single quotes
+            encoded_key = str(key_value).replace("'", "''")
             payload = json.dumps(clean_rec, separators=(',', ':'))
 
             part = (
@@ -80,37 +85,65 @@ def upsert_to_dataverse(environment_url, access_token, table_name, records, logg
                 f"Content-Transfer-Encoding: binary\r\n"
                 f"Content-ID: {i}\r\n"
                 f"\r\n"
-                f"PATCH {table_name}(crf63_businesskey='{key}') HTTP/1.1\r\n"
+                f"PATCH {table_name}({alternate_key}='{encoded_key}') HTTP/1.1\r\n"
                 f"Content-Type: application/json\r\n"
                 f"Prefer: return=representation,odata.include-annotations=*\r\n"
                 f"\r\n"
                 f"{payload}\r\n"
             ).encode()
             parts.append(part)
+            
+            # Debug print first record
+            if debug_first_batch and i == 1:
+                log(f"\n🔍 DEBUG - First record being sent:")
+                log(f"   Table: {table_name}")
+                log(f"   Alternate key field: {alternate_key}")
+                log(f"   Key value (raw): {key_value}")
+                log(f"   Key value (encoded): {encoded_key}")
+                log(f"   PATCH line: PATCH {table_name}({alternate_key}='{encoded_key}') HTTP/1.1")
+                log(f"   Payload: {payload[:200]}...")
+                debug_first_batch = False
 
         parts.append(f"--{changeset_id}--\r\n--{batch_id}--\r\n".encode())
         return b"".join(parts), batch_id
 
     def _count_subresponses(batch_text: str, expected: int):
+        # Count all possible success status codes
         created = batch_text.count('HTTP/1.1 201 Created')
         updated = batch_text.count('HTTP/1.1 200 OK')
-        errors = batch_text.count('HTTP/1.1 4') + batch_text.count('HTTP/1.1 5')
-        accounted = created + updated + errors
+        no_content = batch_text.count('HTTP/1.1 204 No Content')
+        
+        # Count only actual error codes (4xx and 5xx, but NOT 204)
+        errors = 0
+        for code in ['400', '401', '403', '404', '409', '429', '500', '502', '503', '504']:
+            errors += batch_text.count(f'HTTP/1.1 {code}')
+        
+        # For PATCH operations, 204 No Content is success (no body returned)
+        total_success = created + updated + no_content
+        
+        # Debug: Print actual status codes found (only on first batch)
+        nonlocal debug_first_batch
+        if debug_first_batch:
+            log(f"\n🔍 DEBUG - Batch response status codes:")
+            log(f"   201 Created: {created}")
+            log(f"   200 OK: {updated}")
+            log(f"   204 No Content: {no_content}")
+            log(f"   Total Success: {total_success}")
+            log(f"   4xx/5xx Errors: {errors}")
+            log(f"   Expected responses: {expected}")
+            debug_first_batch = False
+        
+        accounted = total_success + errors
 
         if accounted == 0:
             return {"created": 0, "updated": 0, "errors": expected}
 
         if accounted != expected:
-            # Some responses may be 204 No Content; treat as updated for PATCH.
-            no_content = batch_text.count('HTTP/1.1 204 No Content')
-            updated += no_content
-            accounted = created + updated + errors
-
-        if accounted != expected:
             # Fall back to conservative: anything not clearly success is error.
-            errors = max(expected - (created + updated), 0)
+            errors = max(expected - total_success, 0)
 
-        return {"created": created, "updated": updated, "errors": errors}
+        # Treat 204 as updates (PATCH without response body)
+        return {"created": created, "updated": updated + no_content, "errors": errors}
 
     def _extract_error_snippets(batch_text: str, limit: int = 2):
         snippets = []

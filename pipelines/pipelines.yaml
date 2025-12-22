@@ -10,6 +10,11 @@ pipelines:
     catalog: OARS Franchise
     parser: celldata
     mapping: mappings/daily_sales.yaml
+    hierarchy_mappings:
+      - pattern: "Franchise.*Store"
+        field: "StoreNumber"
+      - pattern: "Calendar.*Date"
+        field: "CalendarDate"
     mdx: |-
       SELECT 
       {
@@ -75,6 +80,17 @@ pipelines:
     catalog: OARS Franchise
     parser: sales_channel_daily
     mapping: mappings/sales_channel.yaml
+    hierarchy_mappings:
+      - pattern: "Franchise.*Store"
+        field: "StoreNumber"
+      - pattern: "Calendar.*Date"
+        field: "CalendarDate"
+      - pattern: "Source.*Actor"
+        field: "SourceActor"
+      - pattern: "Source.*Channel"
+        field: "SourceChannel"
+      - pattern: "Day Part.*Day Part"
+        field: "DayPart"
     mdx: |-
       SELECT {[Measures].[TY Net Sales USD],[Measures].[TY Orders],[Measures].[Discounts USD],[Measures].[LY Net Sales USD],[Measures].[LY Orders]} DIMENSION PROPERTIES PARENT_UNIQUE_NAME,HIERARCHY_UNIQUE_NAME ON COLUMNS , 
       NON EMPTY CrossJoin(CrossJoin(CrossJoin(CrossJoin(Hierarchize({[Franchise].[Store Number Label].[Store Number Label].AllMembers}), Hierarchize({[Calendar].[Calendar Date].[Calendar Date].AllMembers})), Hierarchize({[Source Channel].[Source Actor].[Source Actor].AllMembers})), 
@@ -85,6 +101,15 @@ pipelines:
     catalog: Offers
     parser: offers
     mapping: mappings/offers.yaml
+    hierarchy_mappings:
+      - pattern: "Calendar.*Date"
+        field: "CalendarDate"
+      - pattern: "Stores.*Store Number"
+        field: "StoreNumber"
+      - pattern: "Offer Code.*Hierarchy"
+        field: "OfferCode"
+      - pattern: "Offer.*POS Description"
+        field: "OfferDescription"
     mdx: |-
       SELECT {
           [Measures].[Redeemed Count],
@@ -104,5 +129,31 @@ pipelines:
           Hierarchize({[Offer Code].[Offer POS Description].[Offer POS Description].AllMembers})) 
       DIMENSION PROPERTIES PARENT_UNIQUE_NAME,HIERARCHY_UNIQUE_NAME ON ROWS  
       FROM [Offers] 
+      WHERE (${slicer}) 
+      CELL PROPERTIES VALUE, FORMAT_STRING, LANGUAGE, BACK_COLOR, FORE_COLOR, FONT_FLAGS
+
+  inventory:
+    catalog: OARS Franchise
+    parser: inventory
+    mapping: mappings/inventory.yaml
+    hierarchy_mappings:
+      - pattern: ".*Item_Number"
+        field: "ItemNumber"
+      - pattern: "Calendar.*Date"
+        field: "CalendarDate"
+      - pattern: "Franchise.*Store"
+        field: "StoreNumber"
+      - pattern: ".*Item_Description"
+        field: "ItemDescription"
+    mdx: |-
+      SELECT {[Measures].[Qty On Hand]} 
+      DIMENSION PROPERTIES PARENT_UNIQUE_NAME,HIERARCHY_UNIQUE_NAME ON COLUMNS, 
+      NON EMPTY CrossJoin(CrossJoin(CrossJoin(
+          Hierarchize({[Inventory Dimensions].[Item_Number].[Item_Number].AllMembers}), 
+          Hierarchize({[Calendar].[Calendar Date].[Calendar Date].AllMembers})), 
+          Hierarchize({[Franchise].[Store Number Label].[Store Number Label].AllMembers})), 
+          Hierarchize({[Inventory - Description].[Item_Description].[Item_Description].AllMembers})) 
+      DIMENSION PROPERTIES PARENT_UNIQUE_NAME,HIERARCHY_UNIQUE_NAME ON ROWS
+      FROM [OARS Franchise] 
       WHERE (${slicer}) 
       CELL PROPERTIES VALUE, FORMAT_STRING, LANGUAGE, BACK_COLOR, FORE_COLOR, FONT_FLAGS

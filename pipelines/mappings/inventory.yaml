@@ -1,0 +1,24 @@
+table: crf63_inventories  # EntitySet name (pluralized from crf63_inventory)
+alternate_key: crf63_businesskey
+
+business_key:
+  format: "{StoreNumber}_{CalendarDate:%Y%m%d}_{ItemNumber}"
+
+fields:
+  ItemNumber:
+    dataverse: crf63_itemnumber
+    type: string
+  StoreNumber:
+    dataverse: crf63_storenumber
+    type: string
+  CalendarDate:
+    dataverse: crf63_calendardate
+    type: date
+  ItemDescription:
+    dataverse: crf63_itemdescription
+    type: string
+
+measures:
+  "Qty On Hand":
+    dataverse: crf63_qtyonhand
+    type: decimal
