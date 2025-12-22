@@ -197,7 +197,7 @@ measures:
 
 ### Business Key Rules
 
-**CRITICAL**: Never include comment/description fields in business keys!
+**CRITICAL**: Never include comment/description fields in business keys due to chance html encoding issues
 
 Use only:
 - Business identifiers (store numbers, item numbers)
@@ -375,24 +375,27 @@ Once tested:
 python olap_to_dataverse.py --pipeline your_pipeline_name --length 1wk
 ```
 
-### Option B: Add to main --query options
+### Option B: Use pipeline name directly with --query
 
-Edit `modules/olap_sync.py` to add your pipeline to the query routing:
+**New in v2.0**: Pipeline names are now automatically available as `--query` options!
 
-```python
-query_to_pipeline = {
-    'daily': 'daily_sales',
-    'sales_channel': 'sales_channel',
-    'offers': 'offers',
-    'inventory': 'inventory',
-    'your_query_name': 'your_pipeline_name',  # Add this
-}
-```
-
-Then use:
 ```bash
-python olap_to_dataverse.py --query your_query_name --length 1wk
+# Use the pipeline name directly (recommended)
+python olap_to_dataverse.py --query your_pipeline_name --length 1wk
 ```
+
+The `--query` parameter now accepts any pipeline name from `pipelines.yaml`. No Python code changes needed!
+
+**Example**: If your pipeline is named `store_daily_metrics` in `pipelines.yaml`:
+```bash
+python olap_to_dataverse.py --query store_daily_metrics --length 1wk
+```
+
+**Note**: For backward compatibility, legacy query names still work:
+- `--query daily` → maps to `daily_sales` pipeline
+- `--query sales_channel` → maps to `sales_channel` pipeline
+- `--query offers` → maps to `offers` pipeline
+- `--query inventory` → maps to `inventory` pipeline
 
 ---
 

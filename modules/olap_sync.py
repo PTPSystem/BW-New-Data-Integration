@@ -192,12 +192,24 @@ def query_olap_and_sync_to_dataverse(config=None, logger=None, query_type='full_
 def main():
     """Main entry point - uses Azure Key Vault for credentials."""
     
+    # Load available pipelines dynamically from config
+    pipelines = load_pipelines()
+    available_pipelines = list(pipelines.keys())
+    
+    # Legacy aliases for backward compatibility
+    legacy_aliases = {
+        'daily': 'daily_sales',
+        # 'sales_channel' maps to itself
+        # 'offers' maps to itself  
+        # 'inventory' maps to itself
+    }
+    
     parser = argparse.ArgumentParser(description='Sync OLAP data to Dataverse')
     parser.add_argument(
         '--query',
-        choices=['daily', 'offers', 'sales_channel', 'inventory', 'all'],
-        default='daily',
-        help='What to sync: daily, offers, sales_channel, inventory, or all'
+        choices=available_pipelines + ['all'] + list(legacy_aliases.keys()),
+        default='daily_sales',
+        help=f'Pipeline to sync. Available: {", ".join(available_pipelines)}, or "all" for all pipelines'
     )
     parser.add_argument(
         '--length',
@@ -372,22 +384,17 @@ def main():
         print("✓ Key Vault configured (credentials loaded on-demand)")
         print()
         
-        # Route queries through the config-driven pipelines for a consistent interface.
-        query_to_pipeline = {
-            'daily': 'daily_sales',
-            'sales_channel': 'sales_channel',
-            'offers': 'offers',
-            'inventory': 'inventory',
-        }
+        # All pipelines are now directly accessible by name from pipelines.yaml
+        # No more hardcoded query_to_pipeline mapping needed!
 
         if args.query == 'all':
-            print("🔄 Syncing all query types...\n")
+            print("🔄 Syncing all pipelines...\n")
             results = []
-            for q in ['daily', 'sales_channel', 'offers', 'inventory']:
+            for pipeline_name in pipelines.keys():
                 print("=" * 80)
-                print(f"Syncing {q}...")
+                print(f"Syncing {pipeline_name}...")
                 print("=" * 80)
-                results.append((q, run_pipeline_by_name(query_to_pipeline[q], args.length, args.fy, args.period)))
+                results.append((pipeline_name, run_pipeline_by_name(pipeline_name, args.length, args.fy, args.period)))
 
             total_created = sum(r[1].get('records_created', 0) for r in results)
             total_updated = sum(r[1].get('records_updated', 0) for r in results)
@@ -401,7 +408,9 @@ def main():
                 'details': results,
             }
         else:
-            pipeline_name = query_to_pipeline[args.query]
+            # Use pipeline name directly from --query argument
+            # Handle legacy aliases for backward compatibility
+            pipeline_name = legacy_aliases.get(args.query, args.query)
             result = run_pipeline_by_name(pipeline_name, args.length, args.fy, args.period)
 
         
