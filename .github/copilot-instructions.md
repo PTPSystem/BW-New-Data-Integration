@@ -45,3 +45,27 @@ business_key:
 # Incorrect - using description field
 alternate_key: crf63_itemdescription  # DON'T DO THIS
 ```
+
+# Adding New MDX Pipelines
+
+When asked to add a new MDX query or create a new pipeline:
+
+**ALWAYS refer to the comprehensive guide:** `docs/ADD_NEW_PIPELINE.md`
+
+This guide contains:
+- Step-by-step instructions for adding new pipelines
+- How to create hierarchy mappings from MDX queries
+- Pipeline configuration templates
+- Mapping file creation guide
+- Real-world examples and troubleshooting
+
+**Quick reference:**
+1. Analyze MDX query to identify catalog, measures, and dimensions
+2. Create hierarchy_mappings with regex patterns (see examples in guide)
+3. Add pipeline entry to `pipelines/pipelines.yaml`
+4. Create mapping file in `pipelines/mappings/`
+5. Test with `--pipeline your_name --length 1wk --print-mdx`
+
+**No Python code changes needed - it's 100% configuration-driven!**
+
+See `docs/ADD_NEW_PIPELINE.md` for complete instructions and examples.
