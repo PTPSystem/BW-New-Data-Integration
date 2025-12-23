@@ -1,0 +1,49 @@
+table: crf63_bw_clockinouts  # EntitySet name (pluralized from crf63_bw_clockinout)
+alternate_key: crf63_businesskey
+
+business_key:
+  format: "{StoreNumber}_{CalendarDate:%Y%m%d}_{EmployeeName}"
+
+fields:
+  StoreNumber:
+    dataverse: crf63_storenumber
+    type: string
+  CalendarDate:
+    dataverse: crf63_calendardate
+    type: date
+  EmployeeName:
+    dataverse: crf63_employeename
+    type: string
+
+# Metadata fields (auto-populated)
+metadata:
+  name:
+    dataverse: crf63_name
+    type: string
+  datasource:
+    dataverse: crf63_datasource
+    type: string
+  lastrefreshed:
+    dataverse: crf63_lastrefreshed
+    type: datetime
+
+# Time and hours measures
+measures:
+  "Actual Clock In Ts":
+    dataverse: crf63_clockintime
+    type: datetime
+  "Actual Clock Out Ts":
+    dataverse: crf63_clockouttime
+    type: datetime
+  "m_reg_hours_worked_sum":
+    dataverse: crf63_regularhours
+    type: decimal
+  "m_ovt_hours_worked_sum":
+    dataverse: crf63_overtimehours
+    type: decimal
+  "m_total_hours_worked_sum":
+    dataverse: crf63_totalhours
+    type: decimal
+  "m_total_pay_usd_sum":
+    dataverse: crf63_totalpay
+    type: decimal

@@ -192,6 +192,10 @@ def query_olap_and_sync_to_dataverse(config=None, logger=None, query_type='full_
 def main():
     """Main entry point - uses Azure Key Vault for credentials."""
     
+    # Show help if no arguments provided
+    if len(sys.argv) == 1:
+        sys.argv.append('--help')
+    
     # Load available pipelines dynamically from config
     pipelines = load_pipelines()
     available_pipelines = list(pipelines.keys())
@@ -205,9 +209,9 @@ def main():
     )
     parser.add_argument(
         '--length',
-        choices=['1wk', '2wk', '2yr'],
+        choices=['1wk', '2wk'],
         default='2wk',
-        help='Time range: 1wk, 2wk (default), or 2yr (requires confirmation)'
+        help='Time range: 1wk or 2wk (default)'
     )
     parser.add_argument(
         '--fy',
@@ -216,15 +220,10 @@ def main():
         help='Fiscal year slice (e.g., 2023). Overrides MyView-based --length slicing.'
     )
     parser.add_argument(
-        '--period',
+        '--fp',
         type=int,
         default=None,
-        help='13-4 period number (1-13). Requires --fy. Works with offers and sales_channel pipelines.'
-    )
-    parser.add_argument(
-        '--confirm-2yr',
-        action='store_true',
-        help='Required acknowledgement for --length 2yr'
+        help='Fiscal period number (1-13). Requires --fy.'
     )
     parser.add_argument(
         '--email',
@@ -244,12 +243,6 @@ def main():
     )
     args = parser.parse_args()
 
-    if args.length == '2yr' and not args.confirm_2yr:
-        raise SystemExit(
-            "--length 2yr can be expensive and is intended for table backfills. "
-            "Re-run with --confirm-2yr to proceed."
-        )
-
     def run_pipeline_by_name(
         pipeline_name: str,
         length: str,
@@ -265,14 +258,14 @@ def main():
         mapping = load_mapping(p.mapping_path)
 
         if period is not None and fiscal_year is None:
-            raise SystemExit("--period requires --fy")
+            raise SystemExit("--fp requires --fy")
 
         if fiscal_year is not None:
             if pipeline_name in ('offers', 'sales_channel'):
                 # Both Offers and Sales Channel use 13-4 calendar dimensions.
                 if period is not None:
                     if period < 1 or period > 13:
-                        raise SystemExit("--period must be between 1 and 13")
+                        raise SystemExit("--fp must be between 1 and 13")
                     slicer = (
                         f"[13-4 Calendar].[d_Year].[d_Year].&[{int(fiscal_year)}],"
                         f"[13-4 Calendar].[d_Period].[d_Period].&[{int(period)}]"
@@ -280,26 +273,30 @@ def main():
                 else:
                     slicer = f"[13-4 Calendar].[d_Year].[d_Year].&[{int(fiscal_year)}]"
             else:
-                # Daily sales uses regular Calendar hierarchy
+                # Other pipelines use regular Calendar hierarchy
+                if period is not None:
+                    # For pipelines with regular calendar, period is ignored but don't error
+                    print(f"⚠️  --fp is only supported for offers and sales_channel pipelines. Ignoring for {pipeline_name}.")
                 slicer = f"[Calendar].[Calendar Hierarchy].[Fiscal_Year].&[{int(fiscal_year)}]"
 
             mdx = render_mdx_template(p.mdx, {"slicer": slicer})
         elif length in ('1wk', '2wk'):
-            myview_id = 81 if length == '1wk' else 82
-            if pipeline_name == 'offers':
-                # Keep historical behavior (MyView + 13-4 All) as the default for offers.
-                slicer = (
-                    f"([MyView].[My View].[My View].&[{myview_id}],"
-                    "[13-4 Calendar].[Alternate Calendar Hierarchy].[All])"
-                )
+            # VBO cube uses different MyView filter names
+            if p.catalog == 'VBO':
+                myview_filter = 'Last 7 Days' if length == '1wk' else 'Last 14 Days'
+                slicer = f"[MyView].[My View].[My View].&[{myview_filter}]"
             else:
-                slicer = f"[MyView].[My View].[My View].&[{myview_id}]"
+                myview_id = 81 if length == '1wk' else 82
+                if pipeline_name == 'offers':
+                    # Keep historical behavior (MyView + 13-4 All) as the default for offers.
+                    slicer = (
+                        f"([MyView].[My View].[My View].&[{myview_id}],"
+                        "[13-4 Calendar].[Alternate Calendar Hierarchy].[All])"
+                    )
+                else:
+                    slicer = f"[MyView].[My View].[My View].&[{myview_id}]"
 
-            mdx = render_mdx_template(p.mdx, {"myview_id": myview_id, "slicer": slicer})
-        elif length == '2yr':
-            if pipeline_name == 'offers':
-                raise SystemExit("--length 2yr is not supported for offers")
-            mdx = p.mdx
+            mdx = render_mdx_template(p.mdx, {"myview_id": myview_id if p.catalog != 'VBO' else myview_filter, "slicer": slicer})
         else:
             raise SystemExit(f"Unknown length '{length}'")
 
@@ -346,7 +343,7 @@ def main():
 
     # If pipeline is explicitly provided, run it (advanced escape hatch).
     if args.pipeline:
-        result = run_pipeline_by_name(args.pipeline, args.length, args.fy, args.period)
+        result = run_pipeline_by_name(args.pipeline, args.length, args.fy, args.fp)
         print(f"Done: {result['records_created']} created, {result['records_updated']} updated, {result['errors']} errors")
         return 0 if result.get('success') else 1
     
@@ -354,8 +351,8 @@ def main():
     
     # Determine the actual mode being used
     if args.fy is not None:
-        if args.period is not None:
-            mode_description = f"FY{args.fy} Period {args.period}"
+        if args.fp is not None:
+            mode_description = f"FY{args.fy} Period {args.fp}"
         else:
             mode_description = f"FY{args.fy} (full year)"
     else:
@@ -386,7 +383,7 @@ def main():
                 print("=" * 80)
                 print(f"Syncing {pipeline_name}...")
                 print("=" * 80)
-                results.append((pipeline_name, run_pipeline_by_name(pipeline_name, args.length, args.fy, args.period)))
+                results.append((pipeline_name, run_pipeline_by_name(pipeline_name, args.length, args.fy, args.fp)))
 
             total_created = sum(r[1].get('records_created', 0) for r in results)
             total_updated = sum(r[1].get('records_updated', 0) for r in results)
@@ -401,7 +398,7 @@ def main():
             }
         else:
             # Use pipeline name directly from --query argument
-            result = run_pipeline_by_name(args.query, args.length, args.fy, args.period)
+            result = run_pipeline_by_name(args.query, args.length, args.fy, args.fp)
 
         
         # Send email notification if requested

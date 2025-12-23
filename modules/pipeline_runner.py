@@ -111,6 +111,22 @@ def _coerce(value: Any, typ: str):
         except Exception:
             return None
 
+    if typ == "datetime":
+        # Full datetime with time component
+        try:
+            if isinstance(value, str):
+                dt = dt_parser.parse(value)
+            else:
+                dt = value
+            # Return ISO 8601 format with timezone (UTC assumed if not specified)
+            if dt.tzinfo is None:
+                # Assume UTC if no timezone info
+                return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+            else:
+                return dt.isoformat()
+        except Exception:
+            return None
+
     raise ValueError(f"Unsupported type '{typ}'")
 
 
@@ -140,6 +156,15 @@ def transform_df_to_records(
     now_iso = datetime.now().isoformat()
 
     for _, row in df.iterrows():
+        # Skip aggregate rows where any dimension value is 'All'
+        skip_row = False
+        for src in fields.keys():
+            if row.get(src) == 'All':
+                skip_row = True
+                break
+        if skip_row:
+            continue
+            
         record: Dict[str, Any] = {}
 
         # Dimensions/fields
