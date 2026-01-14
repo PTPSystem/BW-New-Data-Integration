@@ -2,7 +2,7 @@ table: crf63_bw_clockinouts  # EntitySet name (pluralized from crf63_bw_clockino
 alternate_key: crf63_businesskey
 
 business_key:
-  format: "{StoreNumber}_{CalendarDate:%Y%m%d}_{EmployeeName}"
+  format: "{StoreNumber}_{CalendarDate:%Y%m%d}_{EmployeeName}_{SystemUserID}"
 
 fields:
   StoreNumber:
@@ -13,6 +13,9 @@ fields:
     type: date
   EmployeeName:
     dataverse: crf63_employeename
+    type: string
+  SystemUserID:
+    dataverse: crf63_systemuserid
     type: string
 
 # Metadata fields (auto-populated)
@@ -46,4 +49,10 @@ measures:
     type: decimal
   "m_total_pay_usd_sum":
     dataverse: crf63_totalpay
+    type: decimal
+  "m_reg_pay_usd_sum":
+    dataverse: crf63_regularpay
+    type: decimal
+  "m_ovt_pay_usd_sum":
+    dataverse: crf63_overtimepay
     type: decimal

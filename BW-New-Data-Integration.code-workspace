@@ -8,6 +8,9 @@
 		},
 		{
 			"path": "../Beachwood-PowerBI"
+		},
+		{
+			"path": "../BW-Stores-ML-Model"
 		}
 	],
 	"settings": {}

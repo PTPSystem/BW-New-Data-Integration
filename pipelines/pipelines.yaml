@@ -169,6 +169,8 @@ pipelines:
         field: "CalendarDate"
       - pattern: "Employee Name.*Employee_Name"
         field: "EmployeeName"
+      - pattern: "System User ID.*System_User_ID"
+        field: "SystemUserID"
     mdx: |-
       SELECT {
           [Measures].[Actual Clock In Ts],
@@ -176,14 +178,22 @@ pipelines:
           [Measures].[m_reg_hours_worked_sum],
           [Measures].[m_ovt_hours_worked_sum],
           [Measures].[m_total_hours_worked_sum],
-          [Measures].[m_total_pay_usd_sum]
+          [Measures].[m_total_pay_usd_sum],
+          [Measures].[m_reg_pay_usd_sum],
+          [Measures].[m_ovt_pay_usd_sum]
       } 
       DIMENSION PROPERTIES PARENT_UNIQUE_NAME,HIERARCHY_UNIQUE_NAME ON COLUMNS, 
-      NON EMPTY CrossJoin(CrossJoin(
+      NON EMPTY CrossJoin(CrossJoin(CrossJoin(
           Hierarchize({DrilldownLevel({[Stores].[Store Number].[All]},,,INCLUDE_CALC_MEMBERS)}), 
           Hierarchize({DrilldownLevel({[Calendar].[Calendar Date].[All]},,,INCLUDE_CALC_MEMBERS)})), 
-          Hierarchize({DrilldownLevel({[Employee Name].[Employee_Name Hierarchy].[All]},,,INCLUDE_CALC_MEMBERS)})) 
+          Hierarchize({DrilldownLevel({[Employee Name].[Employee_Name Hierarchy].[All]},,,INCLUDE_CALC_MEMBERS)})), 
+          Hierarchize({DrilldownLevel({[System User ID].[System_User_ID Hierarchy].[All]},,,INCLUDE_CALC_MEMBERS)})) 
       DIMENSION PROPERTIES PARENT_UNIQUE_NAME,HIERARCHY_UNIQUE_NAME ON ROWS
       FROM [VBO] 
       WHERE (${slicer}) 
       CELL PROPERTIES VALUE, FORMAT_STRING, LANGUAGE, BACK_COLOR, FORE_COLOR, FONT_FLAGS
+
+
+
+
+

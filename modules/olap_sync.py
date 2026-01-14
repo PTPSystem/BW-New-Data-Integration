@@ -2,7 +2,7 @@ import os
 import sys
 import argparse
 import traceback
-from datetime import datetime
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
 # Import local modules
@@ -281,22 +281,19 @@ def main():
 
             mdx = render_mdx_template(p.mdx, {"slicer": slicer})
         elif length in ('1wk', '2wk'):
-            # VBO cube uses different MyView filter names
-            if p.catalog == 'VBO':
-                myview_filter = 'Last 7 Days' if length == '1wk' else 'Last 14 Days'
-                slicer = f"[MyView].[My View].[My View].&[{myview_filter}]"
+            # All cubes now use numeric MyView IDs (81 for 1 week, 82 for 2 weeks)
+            myview_id = 81 if length == '1wk' else 82
+            
+            if pipeline_name == 'offers':
+                # Keep historical behavior (MyView + 13-4 All) as the default for offers.
+                slicer = (
+                    f"([MyView].[My View].[My View].&[{myview_id}],"
+                    "[13-4 Calendar].[Alternate Calendar Hierarchy].[All])"
+                )
             else:
-                myview_id = 81 if length == '1wk' else 82
-                if pipeline_name == 'offers':
-                    # Keep historical behavior (MyView + 13-4 All) as the default for offers.
-                    slicer = (
-                        f"([MyView].[My View].[My View].&[{myview_id}],"
-                        "[13-4 Calendar].[Alternate Calendar Hierarchy].[All])"
-                    )
-                else:
-                    slicer = f"[MyView].[My View].[My View].&[{myview_id}]"
+                slicer = f"[MyView].[My View].[My View].&[{myview_id}]"
 
-            mdx = render_mdx_template(p.mdx, {"myview_id": myview_id if p.catalog != 'VBO' else myview_filter, "slicer": slicer})
+            mdx = render_mdx_template(p.mdx, {"myview_id": myview_id, "slicer": slicer})
         else:
             raise SystemExit(f"Unknown length '{length}'")
 
