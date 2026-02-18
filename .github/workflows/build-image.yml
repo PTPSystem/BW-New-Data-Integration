@@ -6,6 +6,7 @@ on:
     paths:
       - 'olap_to_dataverse.py'
       - 'modules/**'
+      - 'pipelines/**'
       - 'requirements.txt'
       - 'Dockerfile'
       - 'docker/**'
