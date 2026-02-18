@@ -11,7 +11,7 @@ pipelines:
     parser: celldata
     mapping: mappings/daily_sales.yaml
     hierarchy_mappings:
-      - pattern: "Franchise.*Store"
+      - pattern: "Stores.*Store Number"
         field: "StoreNumber"
       - pattern: "Calendar.*Date"
         field: "CalendarDate"
@@ -68,7 +68,7 @@ pipelines:
       } 
       DIMENSION PROPERTIES PARENT_UNIQUE_NAME,HIERARCHY_UNIQUE_NAME ON COLUMNS,
       NON EMPTY CrossJoin(
-          Hierarchize({[Franchise].[Store Number Label].[Store Number Label].AllMembers}),
+          Hierarchize({[Stores].[Store Number].[Store Number].AllMembers}),
           Hierarchize({[Calendar].[Calendar Date].[Calendar Date].AllMembers})
       )
       DIMENSION PROPERTIES PARENT_UNIQUE_NAME,HIERARCHY_UNIQUE_NAME ON ROWS
@@ -81,7 +81,7 @@ pipelines:
     parser: sales_channel_daily
     mapping: mappings/sales_channel.yaml
     hierarchy_mappings:
-      - pattern: "Franchise.*Store"
+      - pattern: "Stores.*Store Number"
         field: "StoreNumber"
       - pattern: "Calendar.*Date"
         field: "CalendarDate"
@@ -93,7 +93,7 @@ pipelines:
         field: "DayPart"
     mdx: |-
       SELECT {[Measures].[TY Net Sales USD],[Measures].[TY Orders],[Measures].[Discounts USD],[Measures].[LY Net Sales USD],[Measures].[LY Orders]} DIMENSION PROPERTIES PARENT_UNIQUE_NAME,HIERARCHY_UNIQUE_NAME ON COLUMNS , 
-      NON EMPTY CrossJoin(CrossJoin(CrossJoin(CrossJoin(Hierarchize({[Franchise].[Store Number Label].[Store Number Label].AllMembers}), Hierarchize({[Calendar].[Calendar Date].[Calendar Date].AllMembers})), Hierarchize({[Source Channel].[Source Actor].[Source Actor].AllMembers})), 
+      NON EMPTY CrossJoin(CrossJoin(CrossJoin(CrossJoin(Hierarchize({[Stores].[Store Number].[Store Number].AllMembers}), Hierarchize({[Calendar].[Calendar Date].[Calendar Date].AllMembers})), Hierarchize({[Source Channel].[Source Actor].[Source Actor].AllMembers})), 
       Hierarchize({[Source Channel].[Source Channel].[Source Channel].AllMembers})), Hierarchize({[Day Part Dimension].[Day Part].[Day Part].AllMembers})) DIMENSION PROPERTIES PARENT_UNIQUE_NAME,HIERARCHY_UNIQUE_NAME ON ROWS  FROM [OARS Franchise] 
       WHERE (${slicer}) CELL PROPERTIES VALUE, FORMAT_STRING, LANGUAGE, BACK_COLOR, FORE_COLOR, FONT_FLAGS
 
@@ -141,7 +141,7 @@ pipelines:
         field: "ItemNumber"
       - pattern: "Calendar.*Date"
         field: "CalendarDate"
-      - pattern: "Franchise.*Store"
+      - pattern: "Stores.*Store Number"
         field: "StoreNumber"
       - pattern: ".*Item_Description"
         field: "ItemDescription"
@@ -151,7 +151,7 @@ pipelines:
       NON EMPTY CrossJoin(CrossJoin(CrossJoin(
           Hierarchize({[Inventory Dimensions].[Item_Number].[Item_Number].AllMembers}), 
           Hierarchize({[Calendar].[Calendar Date].[Calendar Date].AllMembers})), 
-          Hierarchize({[Franchise].[Store Number Label].[Store Number Label].AllMembers})), 
+          Hierarchize({[Stores].[Store Number].[Store Number].AllMembers})), 
           Hierarchize({[Inventory - Description].[Item_Description].[Item_Description].AllMembers})) 
       DIMENSION PROPERTIES PARENT_UNIQUE_NAME,HIERARCHY_UNIQUE_NAME ON ROWS
       FROM [OARS Franchise] 
