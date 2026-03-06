@@ -1,11 +1,33 @@
+import time
 import requests
 from requests.auth import HTTPBasicAuth
 import xml.etree.ElementTree as ET
 import pandas as pd
 import traceback
 
-def execute_xmla_mdx(server, catalog, username, password, mdx_query, ssl_verify=False, logger=None):
-    """Execute an MDX query via XMLA HTTP request and return response text."""
+def execute_xmla_mdx(
+    server,
+    catalog,
+    username,
+    password,
+    mdx_query,
+    ssl_verify=False,
+    logger=None,
+    max_retries=3,
+    retry_backoff_base=30,
+):
+    """Execute an MDX query via XMLA HTTP request and return response text.
+
+    Retries up to ``max_retries`` times on timeout or connection errors,
+    waiting ``retry_backoff_base * 2^attempt`` seconds between attempts
+    (e.g. 30s, 60s, 120s for the default settings).
+    """
+    def log(msg):
+        if logger:
+            logger.info(msg)
+        else:
+            print(msg)
+
     xmla_url = f"{server}/xmla/default" if not server.endswith("/xmla/default") else server
     
     # Use CDATA to avoid XML escaping issues with & characters in MDX
@@ -30,20 +52,37 @@ def execute_xmla_mdx(server, catalog, username, password, mdx_query, ssl_verify=
         'Content-Type': 'text/xml; charset=utf-8',
         'SOAPAction': 'urn:schemas-microsoft-com:xml-analysis:Execute'
     }
-    
-    response = requests.post(
-        xmla_url,
-        data=execute_template.encode('utf-8'),
-        headers=headers,
-        auth=HTTPBasicAuth(username, password),
-        verify=ssl_verify,
-        timeout=300  # 5 minutes for large queries
-    )
-    
-    if response.status_code != 200:
-        raise Exception(f"XMLA query failed with HTTP {response.status_code}: {response.text[:500]}")
-    
-    return response.text
+
+    retryable = (requests.exceptions.Timeout, requests.exceptions.ConnectionError)
+    last_exc = None
+
+    for attempt in range(max_retries + 1):
+        try:
+            response = requests.post(
+                xmla_url,
+                data=execute_template.encode('utf-8'),
+                headers=headers,
+                auth=HTTPBasicAuth(username, password),
+                verify=ssl_verify,
+                timeout=300  # 5 minutes for large queries
+            )
+
+            if response.status_code != 200:
+                raise Exception(f"XMLA query failed with HTTP {response.status_code}: {response.text[:500]}")
+
+            return response.text
+
+        except retryable as exc:
+            last_exc = exc
+            if attempt < max_retries:
+                wait = retry_backoff_base * (2 ** attempt)  # 30s, 60s, 120s
+                log(f"⚠️  OLAP request failed (attempt {attempt + 1}/{max_retries + 1}): {exc}")
+                log(f"   Retrying in {wait}s...")
+                time.sleep(wait)
+            else:
+                log(f"❌ OLAP request failed after {max_retries + 1} attempts: {exc}")
+
+    raise last_exc
 
 def parse_xmla_celldata_response(xml_response, logger=None):
     """
