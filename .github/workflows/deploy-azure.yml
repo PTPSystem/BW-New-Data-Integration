@@ -1,0 +1,118 @@
+name: Deploy to Azure Container App Job
+
+# Triggers on any push to main that changes application or infrastructure code.
+# Also available as a manual trigger from the Actions tab.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'olap_to_dataverse.py'
+      - 'modules/**'
+      - 'pipelines/**'
+      - 'requirements.txt'
+      - 'Dockerfile'
+      - 'docker/**'
+      - 'infra/**'
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Override image tag (leave blank to use git SHA)'
+        required: false
+        default: ''
+
+# Required for OIDC authentication - no client secret stored in GitHub Secrets.
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  RESOURCE_GROUP: rg-bw-data-integration
+  ACR_NAME: acrbwdataintegration
+
+jobs:
+  build-and-deploy:
+    name: Build, Push, and Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      # -----------------------------------------------------------------
+      # 1. Checkout
+      # -----------------------------------------------------------------
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # -----------------------------------------------------------------
+      # 2. Authenticate to Azure via OIDC (no client secret needed)
+      #    Requires one-time setup - see docs/AZURE_CONTAINER_APP_JOB.md
+      # -----------------------------------------------------------------
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      # -----------------------------------------------------------------
+      # 3. Resolve the image tag
+      #    GitHub Actions: use git SHA for traceability
+      #    Manual dispatch: allow override, fall back to git SHA
+      # -----------------------------------------------------------------
+      - name: Resolve image tag
+        id: tag
+        run: |
+          if [[ -n "${{ github.event.inputs.image_tag }}" ]]; then
+            echo "value=${{ github.event.inputs.image_tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "value=${{ github.sha }}" >> $GITHUB_OUTPUT
+          fi
+
+      # -----------------------------------------------------------------
+      # 4. Log in to ACR so Docker can push to it
+      # -----------------------------------------------------------------
+      - name: Log in to ACR
+        run: az acr login --name ${{ env.ACR_NAME }}
+
+      # -----------------------------------------------------------------
+      # 5. Build and push the Docker image
+      #    Tags: <sha> (immutable, for traceability) + latest (convenience)
+      # -----------------------------------------------------------------
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.ACR_NAME }}.azurecr.io/bw-data-integration:${{ steps.tag.outputs.value }}
+            ${{ env.ACR_NAME }}.azurecr.io/bw-data-integration:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # -----------------------------------------------------------------
+      # 6. Deploy Bicep template
+      #    - First run: creates all resources (ACR, environment, job, etc.)
+      #    - Subsequent runs: idempotent update - only the image tag changes
+      # -----------------------------------------------------------------
+      - name: Deploy infrastructure and update job image
+        run: |
+          az deployment group create \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --template-file infra/main.bicep \
+            --parameters infra/main.bicepparam \
+            --parameters imageTag=${{ steps.tag.outputs.value }} \
+            --name "deploy-${{ steps.tag.outputs.value }}"
+
+      # -----------------------------------------------------------------
+      # 7. Print a summary
+      # -----------------------------------------------------------------
+      - name: Deployment summary
+        run: |
+          echo "### Deployment complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| | |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Image** | \`${{ env.ACR_NAME }}.azurecr.io/bw-data-integration:${{ steps.tag.outputs.value }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Resource Group** | \`${{ env.RESOURCE_GROUP }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Job** | \`job-bw-data-integration\` |" >> $GITHUB_STEP_SUMMARY
