@@ -234,6 +234,8 @@ def create_columns(token):
         }
     
     # Helper function to create datetime column
+    # For date-only fields (like Calendar Date), use TimeZoneIndependent behavior
+    # to prevent timezone conversion issues where dates shift by one day
     def datetime_col(schema_name, display_name):
         return {
             "@odata.type": "Microsoft.Dynamics.CRM.DateTimeAttributeMetadata",
@@ -244,6 +246,9 @@ def create_columns(token):
             },
             "AttributeType": "DateTime",
             "AttributeTypeName": {"Value": "DateTimeType"},
+            "DateTimeBehavior": {
+                "Value": "TimeZoneIndependent"
+            },
             "Format": "DateOnly",
             "RequiredLevel": {"Value": "ApplicationRequired", "CanBeChanged": True, "ManagedPropertyLogicalName": "canmodifyrequirementlevelsettings"}
         }

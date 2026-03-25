@@ -87,15 +87,28 @@ def _coerce(value: Any, typ: str):
         return s
 
     if typ == "date":
-        # Date-only semantics: OLAP provides a date (often midnight). Dataverse UI can
-        # shift DateTime values based on timezone; we always emit a pure YYYY-MM-DD.
+        # Date-only semantics: OLAP provides a date (often midnight). 
+        # 
+        # FIX for timezone shift issue: Use 12PM (noon) UTC instead of midnight.
+        # 
+        # Problem: Dataverse DateOnly fields with UserLocal behavior convert UTC to user timezone.
+        # - Midnight UTC (00:00:00Z) appears as previous day in negative UTC offset timezones (e.g., EST)
+        # - Example: 2026-01-26T00:00:00Z displays as 2026-01-25T19:00:00 EST = wrong date (1/25)
+        # 
+        # Solution: Use noon UTC (12:00:00Z) as the timestamp.
+        # - Noon UTC works for all timezones from UTC-12 to UTC+12
+        # - Example: 2026-01-26T12:00:00Z displays as 2026-01-26T07:00:00 EST = correct date (1/26)
+        # 
+        # This works for both UserLocal (current) and TimeZoneIndependent (future) behaviors.
         try:
             if isinstance(value, str):
                 dt = dt_parser.parse(value)
             else:
                 dt = value
-            # Strip any time component by formatting only the date portion.
-            return dt.strftime("%Y-%m-%d")
+            
+            # Set time to noon (12:00 PM) UTC and format with 'Z' suffix
+            dt_noon = dt.replace(hour=12, minute=0, second=0, microsecond=0)
+            return dt_noon.strftime("%Y-%m-%dT%H:%M:%SZ")
         except Exception:
             return None
 

@@ -3,7 +3,6 @@ import msal
 import uuid
 import json
 import time
-import concurrent.futures
 import re
 import json as json_module
 from datetime import datetime
@@ -195,25 +194,25 @@ def upsert_to_dataverse(environment_url, access_token, table_name, records, alte
         return {"created": 0, "updated": 0, "errors": len(chunk)}
 
     # Create batches and process
-    batch_size = 400
+    batch_size = 100
     batches = [valid_records[i:i + batch_size] for i in range(0, total, batch_size)]
-    log(f"Fast upserting {total:,} records in {len(batches)} batches of {batch_size} (6 parallel threads)")
+    log(f"Upserting {total:,} records in {len(batches)} batches of {batch_size} (sequential)")
 
     total_created = 0
     total_updated = 0
     total_errors = 0
     start_time = time.time()
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=6) as ex:
-        for future in concurrent.futures.as_completed([ex.submit(upsert_batch, c) for c in batches]):
-            result = future.result() or {"created": 0, "updated": 0, "errors": 0}
-            total_created += int(result.get("created", 0))
-            total_updated += int(result.get("updated", 0))
-            total_errors += int(result.get("errors", 0))
-            processed = total_created + total_updated + total_errors
-            ok = total_created + total_updated
-            rate = ok / (time.time() - start_time) if time.time() - start_time > 0 else 0
-            log(f"\r  Progress: {processed:,}/{total:,} records ({total_created:,} created, {total_updated:,} updated, {total_errors:,} errors) | {rate:,.0f} ok-rows/sec")
+    for batch_num, chunk in enumerate(batches, 1):
+        result = upsert_batch(chunk) or {"created": 0, "updated": 0, "errors": 0}
+        total_created += int(result.get("created", 0))
+        total_updated += int(result.get("updated", 0))
+        total_errors += int(result.get("errors", 0))
+        processed = total_created + total_updated + total_errors
+        ok = total_created + total_updated
+        elapsed = time.time() - start_time
+        rate = ok / elapsed if elapsed > 0 else 0
+        log(f"  Batch {batch_num}/{len(batches)}: {processed:,}/{total:,} records ({total_created:,} created, {total_updated:,} updated, {total_errors:,} errors) | {rate:,.0f} rows/sec")
 
     elapsed = time.time() - start_time
     log(f"\nFast upsert complete: {total_created:,} created, {total_updated:,} updated, {total_errors:,} errors in {elapsed:.1f}s → {(total_created+total_updated)/elapsed:,.0f} rows/sec")

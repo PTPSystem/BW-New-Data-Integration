@@ -1,0 +1,776 @@
+{
+  "1089": {
+    "model_type": "SARIMA",
+    "order": [
+      3,
+      1,
+      1
+    ],
+    "test_mape": 9.733309600978355,
+    "training_weeks": 261,
+    "test_weeks": 12,
+    "tuned_date": "2026-03-22T23:07:41.544108",
+    "seasonal_order": [
+      1,
+      1,
+      0,
+      52
+    ]
+  },
+  "125": {
+    "model_type": "SARIMA",
+    "order": [
+      1,
+      1,
+      0
+    ],
+    "test_mape": 11.279474613334134,
+    "training_weeks": 261,
+    "test_weeks": 12,
+    "tuned_date": "2026-03-22T23:08:27.720491",
+    "seasonal_order": [
+      0,
+      1,
+      1,
+      52
+    ]
+  },
+  "126": {
+    "model_type": "SARIMA",
+    "order": [
+      1,
+      1,
+      1
+    ],
+    "test_mape": 13.481898188455476,
+    "training_weeks": 261,
+    "test_weeks": 12,
+    "tuned_date": "2026-03-22T23:09:09.934487",
+    "seasonal_order": [
+      0,
+      1,
+      1,
+      52
+    ]
+  },
+  "1334": {
+    "model_type": "SARIMA",
+    "order": [
+      1,
+      1,
+      2
+    ],
+    "test_mape": 11.50807718385558,
+    "training_weeks": 261,
+    "test_weeks": 12,
+    "tuned_date": "2026-03-22T23:08:04.375384",
+    "seasonal_order": [
+      1,
+      1,
+      0,
+      52
+    ]
+  },
+  "1335": {
+    "model_type": "SARIMA",
+    "order": [
+      1,
+      1,
+      0
+    ],
+    "test_mape": 9.231300878545108,
+    "training_weeks": 261,
+    "test_weeks": 12,
+    "tuned_date": "2026-03-22T23:07:48.179795",
+    "seasonal_order": [
+      1,
+      1,
+      0,
+      52
+    ]
+  },
+  "1336": {
+    "model_type": "SARIMA",
+    "order": [
+      1,
+      1,
+      1
+    ],
+    "test_mape": 12.229330979380206,
+    "training_weeks": 261,
+    "test_weeks": 12,
+    "tuned_date": "2026-03-22T23:08:56.089155",
+    "seasonal_order": [
+      1,
+      1,
+      0,
+      52
+    ]
+  },
+  "1338": {
+    "model_type": "SARIMA",
+    "order": [
+      1,
+      1,
+      0
+    ],
+    "test_mape": 11.308731416168342,
+    "training_weeks": 261,
+    "test_weeks": 12,
+    "tuned_date": "2026-03-22T23:07:46.270454",
+    "seasonal_order": [
+      0,
+      1,
+      1,
+      52
+    ]
+  },
+  "1339": {
+    "model_type": "SARIMA",
+    "order": [
+      1,
+      1,
+      0
+    ],
+    "test_mape": 11.161626678102088,
+    "training_weeks": 261,
+    "test_weeks": 12,
+    "tuned_date": "2026-03-22T23:08:18.941378",
+    "seasonal_order": [
+      1,
+      1,
+      0,
+      52
+    ]
+  },
+  "1597": {
+    "model_type": "SARIMA",
+    "order": [
+      1,
+      1,
+      0
+    ],
+    "test_mape": 9.6902733682719,
+    "training_weeks": 261,
+    "test_weeks": 12,
+    "tuned_date": "2026-03-22T23:11:28.333824",
+    "seasonal_order": [
+      1,
+      1,
+      0,
+      52
+    ]
+  },
+  "1598": {
+    "model_type": "SARIMA",
+    "order": [
+      1,
+      1,
+      0
+    ],
+    "test_mape": 10.24112201581875,
+    "training_weeks": 261,
+    "test_weeks": 12,
+    "tuned_date": "2026-03-22T23:10:26.354568",
+    "seasonal_order": [
+      1,
+      1,
+      0,
+      52
+    ]
+  },
+  "1599": {
+    "model_type": "SARIMA",
+    "order": [
+      1,
+      1,
+      1
+    ],
+    "test_mape": 13.210775163302726,
+    "training_weeks": 261,
+    "test_weeks": 12,
+    "tuned_date": "2026-03-22T23:10:39.419345",
+    "seasonal_order": [
+      1,
+      1,
+      0,
+      52
+    ]
+  },
+  "1637": {
+    "model_type": "ARIMA",
+    "order": [
+      1,
+      1,
+      0
+    ],
+    "test_mape": 9.961210805284143,
+    "training_weeks": 261,
+    "test_weeks": 12,
+    "tuned_date": "2026-03-22T23:11:15.023693"
+  },
+  "1976": {
+    "model_type": "SARIMA",
+    "order": [
+      1,
+      1,
+      0
+    ],
+    "test_mape": 14.254644124144322,
+    "training_weeks": 261,
+    "test_weeks": 12,
+    "tuned_date": "2026-03-22T23:10:39.429602",
+    "seasonal_order": [
+      1,
+      1,
+      0,
+      52
+    ]
+  },
+  "1977": {
+    "model_type": "SARIMA",
+    "order": [
+      1,
+      1,
+      1
+    ],
+    "test_mape": 13.556025413104836,
+    "training_weeks": 261,
+    "test_weeks": 12,
+    "tuned_date": "2026-03-22T23:11:16.745980",
+    "seasonal_order": [
+      1,
+      1,
+      1,
+      52
+    ]
+  },
+  "1978": {
+    "model_type": "SARIMA",
+    "order": [
+      1,
+      1,
+      1
+    ],
+    "test_mape": 11.243566605521172,
+    "training_weeks": 261,
+    "test_weeks": 12,
+    "tuned_date": "2026-03-22T23:11:27.232302",
+    "seasonal_order": [
+      1,
+      1,
+      1,
+      52
+    ]
+  },
+  "207": {
+    "model_type": "SARIMA",
+    "order": [
+      1,
+      1,
+      0
+    ],
+    "test_mape": 13.429833716251435,
+    "training_weeks": 261,
+    "test_weeks": 12,
+    "tuned_date": "2026-03-22T23:12:28.529523",
+    "seasonal_order": [
+      1,
+      1,
+      0,
+      52
+    ]
+  },
+  "2256": {
+    "model_type": "SARIMA",
+    "order": [
+      1,
+      1,
+      0
+    ],
+    "test_mape": 14.314168404232367,
+    "training_weeks": 261,
+    "test_weeks": 12,
+    "tuned_date": "2026-03-22T23:12:58.544861",
+    "seasonal_order": [
+      1,
+      1,
+      0,
+      52
+    ]
+  },
+  "2258": {
+    "model_type": "SARIMA",
+    "order": [
+      1,
+      1,
+      0
+    ],
+    "test_mape": 9.859614537506769,
+    "training_weeks": 261,
+    "test_weeks": 12,
+    "tuned_date": "2026-03-22T23:12:53.937067",
+    "seasonal_order": [
+      1,
+      1,
+      0,
+      52
+    ]
+  },
+  "226": {
+    "model_type": "SARIMA",
+    "order": [
+      2,
+      1,
+      1
+    ],
+    "test_mape": 10.955956280563221,
+    "training_weeks": 261,
+    "test_weeks": 12,
+    "tuned_date": "2026-03-22T23:12:55.901053",
+    "seasonal_order": [
+      1,
+      1,
+      0,
+      52
+    ]
+  },
+  "227": {
+    "model_type": "SARIMA",
+    "order": [
+      3,
+      1,
+      1
+    ],
+    "test_mape": 11.841278350072313,
+    "training_weeks": 261,
+    "test_weeks": 12,
+    "tuned_date": "2026-03-22T23:14:34.707180",
+    "seasonal_order": [
+      1,
+      1,
+      0,
+      52
+    ]
+  },
+  "2319": {
+    "model_type": "SARIMA",
+    "order": [
+      1,
+      1,
+      1
+    ],
+    "test_mape": 14.513070806083645,
+    "training_weeks": 261,
+    "test_weeks": 12,
+    "tuned_date": "2026-03-22T23:13:14.905564",
+    "seasonal_order": [
+      0,
+      1,
+      1,
+      52
+    ]
+  },
+  "2342": {
+    "model_type": "SARIMA",
+    "order": [
+      1,
+      1,
+      1
+    ],
+    "test_mape": 10.951696367539745,
+    "training_weeks": 261,
+    "test_weeks": 12,
+    "tuned_date": "2026-03-22T23:13:42.641609",
+    "seasonal_order": [
+      0,
+      1,
+      1,
+      52
+    ]
+  },
+  "2353": {
+    "model_type": "SARIMA",
+    "order": [
+      2,
+      1,
+      1
+    ],
+    "test_mape": 12.019771511027194,
+    "training_weeks": 261,
+    "test_weeks": 12,
+    "tuned_date": "2026-03-22T23:14:29.756914",
+    "seasonal_order": [
+      1,
+      1,
+      0,
+      52
+    ]
+  },
+  "2596": {
+    "model_type": "SARIMA",
+    "order": [
+      3,
+      1,
+      1
+    ],
+    "test_mape": 12.411531070219096,
+    "training_weeks": 261,
+    "test_weeks": 12,
+    "tuned_date": "2026-03-22T23:14:46.369429",
+    "seasonal_order": [
+      1,
+      1,
+      0,
+      52
+    ]
+  },
+  "2686": {
+    "model_type": "SARIMA",
+    "order": [
+      1,
+      1,
+      0
+    ],
+    "test_mape": 10.7585200426919,
+    "training_weeks": 261,
+    "test_weeks": 12,
+    "tuned_date": "2026-03-22T23:15:32.756770",
+    "seasonal_order": [
+      0,
+      1,
+      1,
+      52
+    ]
+  },
+  "2770": {
+    "model_type": "SARIMA",
+    "order": [
+      1,
+      1,
+      0
+    ],
+    "test_mape": 12.624885658521345,
+    "training_weeks": 261,
+    "test_weeks": 12,
+    "tuned_date": "2026-03-22T23:15:37.088019",
+    "seasonal_order": [
+      1,
+      1,
+      0,
+      52
+    ]
+  },
+  "288": {
+    "model_type": "SARIMA",
+    "order": [
+      2,
+      1,
+      2
+    ],
+    "test_mape": 12.688751507475596,
+    "training_weeks": 261,
+    "test_weeks": 12,
+    "tuned_date": "2026-03-22T23:15:13.029256",
+    "seasonal_order": [
+      1,
+      1,
+      0,
+      52
+    ]
+  },
+  "2928": {
+    "model_type": "SARIMA",
+    "order": [
+      1,
+      1,
+      1
+    ],
+    "test_mape": 10.737858266154303,
+    "training_weeks": 261,
+    "test_weeks": 12,
+    "tuned_date": "2026-03-22T23:15:26.723053",
+    "seasonal_order": [
+      1,
+      1,
+      1,
+      52
+    ]
+  },
+  "3077": {
+    "model_type": "SARIMA",
+    "order": [
+      1,
+      1,
+      1
+    ],
+    "test_mape": 12.199916374595798,
+    "training_weeks": 261,
+    "test_weeks": 12,
+    "tuned_date": "2026-03-22T23:15:57.835154",
+    "seasonal_order": [
+      0,
+      1,
+      1,
+      52
+    ]
+  },
+  "314": {
+    "model_type": "SARIMA",
+    "order": [
+      1,
+      1,
+      2
+    ],
+    "test_mape": 9.907043119734636,
+    "training_weeks": 261,
+    "test_weeks": 12,
+    "tuned_date": "2026-03-22T23:17:13.713398",
+    "seasonal_order": [
+      1,
+      1,
+      0,
+      52
+    ]
+  },
+  "3283": {
+    "model_type": "SARIMA",
+    "order": [
+      2,
+      1,
+      0
+    ],
+    "test_mape": 9.348259712424365,
+    "training_weeks": 261,
+    "test_weeks": 12,
+    "tuned_date": "2026-03-22T23:16:31.770400",
+    "seasonal_order": [
+      1,
+      1,
+      0,
+      52
+    ]
+  },
+  "3302": {
+    "model_type": "ARIMA",
+    "order": [
+      1,
+      1,
+      0
+    ],
+    "test_mape": 14.249426467711956,
+    "training_weeks": 261,
+    "test_weeks": 12,
+    "tuned_date": "2026-03-22T23:16:27.002317"
+  },
+  "331": {
+    "model_type": "SARIMA",
+    "order": [
+      1,
+      1,
+      1
+    ],
+    "test_mape": 9.356865833792751,
+    "training_weeks": 261,
+    "test_weeks": 12,
+    "tuned_date": "2026-03-22T23:17:52.145080",
+    "seasonal_order": [
+      0,
+      1,
+      1,
+      52
+    ]
+  },
+  "3390": {
+    "model_type": "SARIMA",
+    "order": [
+      1,
+      1,
+      0
+    ],
+    "test_mape": 11.444276419259136,
+    "training_weeks": 261,
+    "test_weeks": 12,
+    "tuned_date": "2026-03-22T23:17:12.618053",
+    "seasonal_order": [
+      0,
+      1,
+      1,
+      52
+    ]
+  },
+  "349": {
+    "model_type": "ARIMA",
+    "order": [
+      3,
+      1,
+      1
+    ],
+    "test_mape": 12.65238856866556,
+    "training_weeks": 261,
+    "test_weeks": 12,
+    "tuned_date": "2026-03-22T23:17:56.296970"
+  },
+  "3503": {
+    "model_type": "SARIMA",
+    "order": [
+      1,
+      1,
+      1
+    ],
+    "test_mape": 10.655821370438744,
+    "training_weeks": 261,
+    "test_weeks": 12,
+    "tuned_date": "2026-03-22T23:17:54.661451",
+    "seasonal_order": [
+      0,
+      1,
+      1,
+      52
+    ]
+  },
+  "3716": {
+    "model_type": "SARIMA",
+    "order": [
+      1,
+      1,
+      1
+    ],
+    "test_mape": 11.028927846831388,
+    "training_weeks": 261,
+    "test_weeks": 12,
+    "tuned_date": "2026-03-22T23:18:01.149258",
+    "seasonal_order": [
+      0,
+      1,
+      1,
+      52
+    ]
+  },
+  "381": {
+    "model_type": "SARIMA",
+    "order": [
+      1,
+      1,
+      0
+    ],
+    "test_mape": 10.642644847489459,
+    "training_weeks": 261,
+    "test_weeks": 12,
+    "tuned_date": "2026-03-22T23:18:43.522245",
+    "seasonal_order": [
+      1,
+      1,
+      0,
+      52
+    ]
+  },
+  "434": {
+    "model_type": "SARIMA",
+    "order": [
+      1,
+      1,
+      0
+    ],
+    "test_mape": 11.529585813137377,
+    "training_weeks": 261,
+    "test_weeks": 12,
+    "tuned_date": "2026-03-22T23:18:53.258713",
+    "seasonal_order": [
+      1,
+      1,
+      0,
+      52
+    ]
+  },
+  "4398": {
+    "model_type": "SARIMA",
+    "order": [
+      1,
+      1,
+      0
+    ],
+    "test_mape": 9.07934834710747,
+    "training_weeks": 261,
+    "test_weeks": 12,
+    "tuned_date": "2026-03-22T23:19:02.702423",
+    "seasonal_order": [
+      1,
+      1,
+      0,
+      52
+    ]
+  },
+  "538": {
+    "model_type": "ARIMA",
+    "order": [
+      2,
+      1,
+      2
+    ],
+    "test_mape": 12.933468118615895,
+    "training_weeks": 261,
+    "test_weeks": 12,
+    "tuned_date": "2026-03-22T23:19:35.786838"
+  },
+  "574": {
+    "model_type": "SARIMA",
+    "order": [
+      2,
+      1,
+      1
+    ],
+    "test_mape": 12.030088321437727,
+    "training_weeks": 261,
+    "test_weeks": 12,
+    "tuned_date": "2026-03-22T23:19:51.915560",
+    "seasonal_order": [
+      1,
+      1,
+      0,
+      52
+    ]
+  },
+  "683": {
+    "model_type": "SARIMA",
+    "order": [
+      1,
+      1,
+      1
+    ],
+    "test_mape": 14.5898825834309,
+    "training_weeks": 261,
+    "test_weeks": 12,
+    "tuned_date": "2026-03-22T23:19:47.461313",
+    "seasonal_order": [
+      0,
+      1,
+      1,
+      52
+    ]
+  },
+  "735": {
+    "model_type": "ARIMA",
+    "order": [
+      2,
+      1,
+      0
+    ],
+    "test_mape": 13.095201232700813,
+    "training_weeks": 261,
+    "test_weeks": 12,
+    "tuned_date": "2026-03-22T23:19:50.202309"
+  },
+  "884": {
+    "model_type": "ARIMA",
+    "order": [
+      1,
+      1,
+      1
+    ],
+    "test_mape": 10.805894190574627,
+    "training_weeks": 261,
+    "test_weeks": 12,
+    "tuned_date": "2026-03-22T23:19:47.635886"
+  }
+}

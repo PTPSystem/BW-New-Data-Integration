@@ -3,6 +3,7 @@ import sys
 import argparse
 import traceback
 from datetime import datetime, timedelta
+from typing import Optional
 from dotenv import load_dotenv
 
 # Import local modules
@@ -246,8 +247,8 @@ def main():
     def run_pipeline_by_name(
         pipeline_name: str,
         length: str,
-        fiscal_year: int | None = None,
-        period: int | None = None,
+        fiscal_year: Optional[int] = None,
+        period: Optional[int] = None,
     ):
         cfg = load_config()
         pipelines = load_pipelines()
