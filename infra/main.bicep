@@ -210,9 +210,150 @@ resource job 'Microsoft.App/jobs@2024-03-01' = {
 }
 
 // ---------------------------------------------------------------------------
+// Container App Job - Sales Forecast (every Friday)
+//
+// Runs sales_forecast.py every Friday at 6:00 AM UTC to forecast next week.
+// ---------------------------------------------------------------------------
+resource jobSalesForecast 'Microsoft.App/jobs@2024-03-01' = {
+  name: 'job-bw-sales-forecast'
+  location: location
+  identity: {
+    type: 'UserAssigned'
+    userAssignedIdentities: {
+      '${managedIdentity.id}': {}
+    }
+  }
+  properties: {
+    environmentId: environment.id
+    configuration: {
+      triggerType: 'Schedule'
+      replicaTimeout: 2700       // 45 minutes
+      replicaRetryLimit: 1
+      scheduleTriggerConfig: {
+        cronExpression: '0 6 * * 5'  // Every Friday at 6:00 AM UTC
+        parallelism: 1
+        replicaCompletionCount: 1
+      }
+      registries: [
+        {
+          server: acr.properties.loginServer
+          identity: managedIdentity.id
+        }
+      ]
+    }
+    template: {
+      containers: [
+        {
+          name: 'bw-sales-forecast'
+          image: '${acr.properties.loginServer}/bw-data-integration:${imageTag}'
+          args: [
+            'python'
+            'sales_forecast.py'
+          ]
+          resources: {
+            cpu: json('0.5')
+            memory: '1Gi'
+          }
+          env: [
+            {
+              name: 'AZURE_CLIENT_ID'
+              value: managedIdentity.properties.clientId
+            }
+            {
+              name: 'ENVIRONMENT'
+              value: 'production'
+            }
+            {
+              name: 'LOG_LEVEL'
+              value: 'INFO'
+            }
+          ]
+        }
+      ]
+    }
+  }
+  dependsOn: [
+    acrPullRole
+    kvSecretsUserRole
+  ]
+}
+
+// ---------------------------------------------------------------------------
+// Container App Job - Fine-Tune Sales Forecast (1st of every month)
+//
+// Runs fine_tune_sales_forecast.py monthly to re-optimize ARIMA parameters
+// and update config/sales_forecast_parameters.json.
+// ---------------------------------------------------------------------------
+resource jobFineTune 'Microsoft.App/jobs@2024-03-01' = {
+  name: 'job-bw-fine-tune-forecast'
+  location: location
+  identity: {
+    type: 'UserAssigned'
+    userAssignedIdentities: {
+      '${managedIdentity.id}': {}
+    }
+  }
+  properties: {
+    environmentId: environment.id
+    configuration: {
+      triggerType: 'Schedule'
+      replicaTimeout: 5400       // 90 minutes (fine-tuning is more compute-intensive)
+      replicaRetryLimit: 1
+      scheduleTriggerConfig: {
+        cronExpression: '0 6 1 * *'  // 1st of every month at 6:00 AM UTC
+        parallelism: 1
+        replicaCompletionCount: 1
+      }
+      registries: [
+        {
+          server: acr.properties.loginServer
+          identity: managedIdentity.id
+        }
+      ]
+    }
+    template: {
+      containers: [
+        {
+          name: 'bw-fine-tune-forecast'
+          image: '${acr.properties.loginServer}/bw-data-integration:${imageTag}'
+          args: [
+            'python'
+            'fine_tune_sales_forecast.py'
+          ]
+          resources: {
+            cpu: json('0.5')
+            memory: '1Gi'
+          }
+          env: [
+            {
+              name: 'AZURE_CLIENT_ID'
+              value: managedIdentity.properties.clientId
+            }
+            {
+              name: 'ENVIRONMENT'
+              value: 'production'
+            }
+            {
+              name: 'LOG_LEVEL'
+              value: 'INFO'
+            }
+          ]
+        }
+      ]
+    }
+  }
+  dependsOn: [
+    acrPullRole
+    kvSecretsUserRole
+  ]
+}
+
+// ---------------------------------------------------------------------------
 // Outputs  (referenced by GitHub Actions workflow)
 // ---------------------------------------------------------------------------
 output acrLoginServer string = acr.properties.loginServer
 output acrName string = acr.name
 output jobName string = job.name
+output jobSalesForecastName string = jobSalesForecast.name
+output jobFineTuneName string = jobFineTune.name
 output managedIdentityClientId string = managedIdentity.properties.clientId
