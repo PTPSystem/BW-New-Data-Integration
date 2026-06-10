@@ -109,7 +109,7 @@ pipelines:
       - pattern: "Offer Code.*Hierarchy"
         field: "OfferCode"
       - pattern: "Offer.*POS Description"
-        field: "OfferDescription"
+        field: "OfferPOSDescription"
     mdx: |-
       SELECT {
           [Measures].[Redeemed Count],
