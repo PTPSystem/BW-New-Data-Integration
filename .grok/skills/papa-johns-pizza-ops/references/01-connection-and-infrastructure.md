@@ -100,3 +100,42 @@ This should discover current measures (via code or light queries) and help keep 
 - Use of MyView for incremental queries
 
 Always work in `BW-New-Data-Integration` for new development.
+
+## Layer B — Beachwood Daily Power BI (Wired)
+
+### Endpoint & IDs
+- **REST API**: `https://api.powerbi.com/v1.0/myorg`
+- **Workspace**: Shared Workspace — `ba0545ee-6dee-4757-b5c2-c5946cd9e320`
+- **Dataset**: Beachwood Daily — `6fd26600-b245-404f-86e4-5841e1c88e9c`
+
+### Authentication
+Uses the **same service principal** as Dataverse:
+- Key Vault: `app-client-id`, `app-client-secret`, `azure-tenant-id`
+- App registration: `ar-bw-data-integration`
+- Service principal object ID: `a9591855-4270-4364-9b09-190e89671e5b`
+- Token scope: `https://analysis.windows.net/powerbi/api/.default`
+
+Optional routing overrides in Key Vault:
+- `powerbi-workspace-id`
+- `powerbi-dataset-id`
+- `powerbi-dataset-name`
+
+Or environment variables: `POWERBI_WORKSPACE_ID`, `POWERBI_DATASET_ID`.
+
+### Client Code
+- `modules/powerbi.py` — `get_powerbi_access_token()`, `execute_dax_query()`
+- `modules/powerbi_queries.py` — DAX query builders
+- CLI: `python .grok/skills/papa-johns-pizza-ops/scripts/query_beachwood_daily.py ...`
+
+### Workspace Access Requirements
+- Service principal must be **Member** or **Admin** on the shared workspace.
+- **Viewer** can see the workspace but **cannot** run `executeQueries`.
+- Do **not** add service principals via Semantic model → Permissions (email-only UI). Use **Workspace access**.
+
+### Example
+```python
+from modules.powerbi import execute_dax_query
+from modules.powerbi_queries import get_store_profitability_ranking_dax
+
+df = execute_dax_query(get_store_profitability_ranking_dax(days=14))
+```

@@ -3,9 +3,10 @@
 This is the **current active repository** for Papa John's (PPJ) franchise operations BI and OLAP-to-Dataverse pipelines.
 
 ## When Working Here
-- Use the modern modular structure under `modules/` (`olap.py`, `mdx_queries.py`, `olap_sync.py`, `keyvault.py`, etc.).
-- All sensitive credentials come from Azure Key Vault **`kv-bw-data-integration`** (secrets include `olap-username`, `olap-password`, `app-client-id`, etc.).
-- Prefer efficient incremental queries using MyView filters (see `modules/mdx_queries.py`).
+- Use the modern modular structure under `modules/` (`olap.py`, `mdx_queries.py`, `powerbi.py`, `powerbi_queries.py`, `olap_sync.py`, `keyvault.py`, etc.).
+- **Two data layers**: Layer A = OARS cube (MDX on `ednacubes`); Layer B = Beachwood Daily Power BI semantic model (DAX on `api.powerbi.com`).
+- All sensitive credentials come from Azure Key Vault **`kv-bw-data-integration`**.
+- Profit / PaFLMD questions → Layer B (`query_beachwood_daily.py`). Ops / costs / times → Layer A (`query_ppj.py`).
 - Run `az login` for local development Key Vault access.
 - New pipelines and mappings live under `pipelines/`.
 

@@ -25,19 +25,21 @@ This skill gives you deep, always-up-to-date knowledge of Papa John's franchise 
 
 ## Connection & Execution (Current Infrastructure)
 - **OARS cube (Layer A)**: `https://ednacubes.papajohns.com:10502` / catalog `OARS Franchise`
-- **Beachwood Daily semantic model (Layer B)**: Published Fabric/Power BI dataset **Beachwood Daily** — query via Power BI XMLA endpoint (not yet wired in this repo; see `08-beachwood-daily-semantic-model.md`)
-- **Auth (preferred)**: Secrets `olap-username` and `olap-password` in Azure Key Vault **`kv-bw-data-integration`**.
-- **Modern client**:
-  - `modules/olap.py` → `execute_xmla_mdx(...)` and `parse_xmla_celldata_response(...)`
-  - `modules/mdx_queries.py` → `get_mdx_last_n_days()`, `get_sample_mdx_queries()`, sales channel, offers, etc. (now 47+ measures)
-- **Preferred execution for this skill**: Use the helper script `python .grok/skills/papa-johns-pizza-ops/scripts/query_ppj.py ...`
+- **Beachwood Daily (Layer B)**: `api.powerbi.com` — workspace `ba0545ee-6dee-4757-b5c2-c5946cd9e320`, dataset `6fd26600-b245-404f-86e4-5841e1c88e9c`
+- **Layer A auth**: `olap-username`, `olap-password` in Key Vault
+- **Layer B auth**: `app-client-id`, `app-client-secret`, `azure-tenant-id` (service principal `ar-bw-data-integration`, workspace role **Member**)
+- **Clients**:
+  - Layer A: `modules/olap.py`, `modules/mdx_queries.py` → `query_ppj.py`
+  - Layer B: `modules/powerbi.py`, `modules/powerbi_queries.py` → `query_beachwood_daily.py`
 
 See full details: [01-connection-and-infrastructure.md](./references/01-connection-and-infrastructure.md)
 
 ## Key Vault (Current)
 - Vault: `kv-bw-data-integration`
-- OLAP secrets: `olap-username`, `olap-password`
-- Always run `az login` first for local development (enables DefaultAzureCredential).
+- OLAP: `olap-username`, `olap-password`
+- Power BI / Entra: `app-client-id`, `app-client-secret`, `azure-tenant-id`
+- Optional Power BI routing: `powerbi-workspace-id`, `powerbi-dataset-id`
+- Local dev: `az login` for Key Vault access
 
 ## Quick Reference: Core Measures
 See the full catalog with business meanings: [03-measures-catalog.md](./references/03-measures-catalog.md)
@@ -55,12 +57,11 @@ Major groups include the original 33 + newer service metrics (SMG, Singles/Doubl
 - [08-beachwood-daily-semantic-model.md](./references/08-beachwood-daily-semantic-model.md) — **PaFLMD, profit, Beachwood Daily DAX measures**
 
 ## Recommended Workflow
-1. Read the relevant reference docs (especially measures catalog + patterns).
-2. Identify measures + dimension filters.
-3. Generate MDX using helpers from `modules/mdx_queries.py` (or craft one).
-4. Execute via the skill's `query_ppj.py` script (it handles Key Vault + modern parser).
-5. Interpret results using business meanings in the catalog.
-6. Deliver actionable franchise ops insight.
+1. Read the relevant reference docs (measures catalog + patterns + layer guide).
+2. **Profit / PaFLMD** → Layer B (`query_beachwood_daily.py`). **Ops / costs / times** → Layer A (`query_ppj.py`).
+3. Execute via the appropriate skill script (Key Vault auth handled automatically).
+4. Interpret using business meanings in the catalog.
+5. Deliver actionable franchise ops insight.
 
 ## Keeping Knowledge Fresh
 ```bash

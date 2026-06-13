@@ -9,15 +9,18 @@ This skill + references turns the Papa John's OARS semantic model into agent-usa
 ├── README.md
 ├── references/          # Curated business + technical knowledge (loaded by Grok)
 └── scripts/
-    ├── query_ppj.py     # Main helper the agent uses to hit the live cube
+    ├── query_ppj.py              # Layer A — OARS cube (MDX)
+    ├── query_beachwood_daily.py  # Layer B — Beachwood Daily (DAX)
     └── refresh_knowledge.py
 ```
 
 ## Important Notes for This Repo
 - Key Vault is now `kv-bw-data-integration`
 - OLAP secrets: `olap-username` and `olap-password`
-- Use modern modules: `modules/olap.py` + `modules/mdx_queries.py`
-- Prefer MyView-based incremental queries for recent data
+- Layer A: `modules/olap.py` + `modules/mdx_queries.py` + `query_ppj.py`
+- Layer B: `modules/powerbi.py` + `modules/powerbi_queries.py` + `query_beachwood_daily.py`
+- Beachwood Daily workspace `ba0545ee-6dee-4757-b5c2-c5946cd9e320`, dataset `6fd26600-b245-404f-86e4-5841e1c88e9c`
+- Service principal `ar-bw-data-integration` must be **Member** on the shared workspace
 
 ## Usage
 Ask normal Papa John's ops questions while the repo is in context. The skill should activate.

@@ -10,7 +10,28 @@
 - **Profit / GL table**: `GL Report` (`Net Profit` from general ledger categories)
 - **Store attributes**: `Stores` (per-store PaFLMD→profit regression coefficients)
 
-This repo (`BW-New-Data-Integration`) currently queries **Layer A only** (OARS cube). Profit questions that reference **PaFLMD** require **Layer B** unless you compute the cube equivalent.
+## Live Connection (Wired in BW-New-Data-Integration)
+
+| Item | Value |
+|------|-------|
+| **Workspace** | Shared Workspace |
+| **Workspace ID** | `ba0545ee-6dee-4757-b5c2-c5946cd9e320` |
+| **Dataset** | Beachwood Daily |
+| **Dataset ID** | `6fd26600-b245-404f-86e4-5841e1c88e9c` |
+| **API** | `https://api.powerbi.com/v1.0/myorg` |
+| **Auth** | Service principal `ar-bw-data-integration` |
+| **SP object ID** | `a9591855-4270-4364-9b09-190e89671e5b` |
+| **Client ID** | `d056223e-f0de-4b16-b4e0-fec2a24109ff` |
+| **Required workspace role** | **Member** (Viewer cannot execute DAX) |
+
+**Code:**
+- `modules/powerbi.py` — token + `execute_dax_query()`
+- `modules/powerbi_queries.py` — DAX builders
+- `.grok/skills/papa-johns-pizza-ops/scripts/query_beachwood_daily.py` — CLI
+
+```bash
+python .grok/skills/papa-johns-pizza-ops/scripts/query_beachwood_daily.py --preset profitability --days 14
+```
 
 ## PaFLMD — The Key Profitability Driver
 
@@ -22,15 +43,11 @@ This repo (`BW-New-Data-Integration`) currently queries **Layer A only** (OARS c
 PaFLMD = Sum(DailyAtScale[TY Net Sales USD]) - Sum(DailyAtScale[FLMD USD])
 ```
 
-Business meaning: dollars remaining after Food + Labor + Management/Direct costs. Higher PaFLMD = more room for profit after covering controllable prime costs.
-
-### Cube equivalent (when only Layer A is available)
+### Cube equivalent (Layer A fallback)
 
 ```text
 PaFLMD ≈ TY Net Sales USD − FLMD USD
 ```
-
-Aggregate by store and period after pulling from `get_mdx_last_n_days()`.
 
 ### Related DAX measures (Beachwood Daily only)
 
@@ -38,65 +55,23 @@ Aggregate by store and period after pulling from `get_mdx_last_n_days()`.
 |---------|---------|
 | `LY PaFLMD` | Prior-year comp version |
 | `Comp PaFLMD` | Period-over-period % change |
-| `PaFLMD(c)` | Calculated column: per-row `TY Net Sales USD - FLMD USD` |
-| `Estimated Break Even` | Store-level break-even PaFLMD threshold (from regression) |
-| `Estimate Profit Loss Period` | `(PaFLMD - Estimated Break Even) × Avg(PaFLMD to Profit Slope)` |
-| `Estimate Profit Loss Period Dyn` | Dynamic regression variant |
-| `Dynamic PaFLMD to Profit Slope 2` | LINESTX slope of Net Profit vs PaFLMD |
+| `Estimated Break Even` | Store-level break-even PaFLMD threshold |
+| `Estimate Profit Loss Period` | Estimated profit/loss from PaFLMD vs break-even |
 | `Net Profit` | Actual GL net profit (`GL Report` table) |
+| `Dynamic PaFLMD to Profit Slope 2` | LINESTX slope of Net Profit vs PaFLMD |
 
-### How profit is modeled
+## Ranking Least / Most Profitable Stores
 
-Beachwood fits a **linear regression** per store:
-
-```text
-Net Profit ≈ Slope × PaFLMD + Intercept
+**Preferred (Layer B):**
+```bash
+python .grok/skills/papa-johns-pizza-ops/scripts/query_beachwood_daily.py --preset profitability --days 14
 ```
 
-Store coefficients live in `Stores[PaFLMD to Profit Slope]` and `Stores[PaFLMD to Profit Intercept]`. Break-even PaFLMD is `-Intercept / Slope`.
+Rank by `PaFLMD`, `Estimate Profit Loss Period`, or `Net Profit`.
 
-When actual GL `Net Profit` is blank, the model falls back to `Estimate Profit Loss Period`.
+## Setup Checklist (for new environments)
 
-## When to Use Which Layer
-
-| Question | Layer | Measure |
-|----------|-------|---------|
-| Food cost %, labor hours, Make/Rack time | A (OARS cube) | `Actual Food Cost USD`, `HS Total Actual Hours`, etc. |
-| PaFLMD, profit pacing, least profitable stores | **B (Beachwood Daily)** | `PaFLMD`, `Estimate Profit Loss Period`, `Net Profit` |
-| Quick PaFLMD proxy without PBI connection | A (compute) | `TY Net Sales USD - FLMD USD` |
-
-## Querying Layer B (Not Yet in BW-New-Data-Integration)
-
-To query the published semantic model directly you need:
-
-1. **Power BI / Fabric XMLA endpoint** for the workspace hosting **Beachwood Daily**
-2. **Entra ID auth** (service principal or user with dataset read + XMLA permissions)
-3. **DAX** (not MDX) for measures like `[PaFLMD]`
-
-Example DAX pattern (once endpoint is configured):
-
-```dax
-EVALUATE
-SUMMARIZECOLUMNS(
-    Stores[Stores Number 0],
-    "PaFLMD", [PaFLMD],
-    "Est Profit", [Estimate Profit Loss Period],
-    "Net Profit", [Net Profit]
-)
-```
-
-Store in Key Vault when available: workspace ID, dataset ID, XMLA endpoint URL, and service principal credentials.
-
-## Ranking Least Profitable Stores
-
-Preferred approach (Layer B):
-
-1. Filter to the desired period (calendar / fiscal week).
-2. Rank stores by **`Estimate Profit Loss Period`** or **`Net Profit`** (ascending).
-3. Use **`PaFLMD`** as the explanatory driver (contribution margin after FLMD).
-
-Fallback (Layer A only):
-
-1. Pull `TY Net Sales USD` and `FLMD USD` per store.
-2. Compute `PaFLMD = Sales - FLMD`.
-3. Rank lowest PaFLMD — this identifies worst **contribution after prime costs**, not full GL profit.
+1. Semantic model in a **shared workspace** (not My Workspace).
+2. Add `ar-bw-data-integration` as **Member** via Workspace access.
+3. Enable Power BI admin setting: **Allow service principals to use Power BI APIs**.
+4. Optional: store `powerbi-workspace-id` and `powerbi-dataset-id` in Key Vault `kv-bw-data-integration`.

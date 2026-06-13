@@ -42,6 +42,18 @@
 | `olap-username` | OLAP server authentication username | `olap_to_dataverse.py` |
 | `olap-password` | OLAP server authentication password | `olap_to_dataverse.py` |
 
+### 4b. Power BI / Beachwood Daily (Optional Routing)
+
+Auth reuses `app-client-id`, `app-client-secret`, and `azure-tenant-id` (service principal `ar-bw-data-integration`).
+
+| Secret Name | Purpose | Default if not set |
+|-------------|---------|-------------------|
+| `powerbi-workspace-id` | Shared workspace GUID | `ba0545ee-6dee-4757-b5c2-c5946cd9e320` |
+| `powerbi-dataset-id` | Beachwood Daily dataset GUID | `6fd26600-b245-404f-86e4-5841e1c88e9c` |
+| `powerbi-dataset-name` | Display name (documentation) | `Beachwood Daily` |
+
+Used by `modules/powerbi.py` and `query_beachwood_daily.py`. Service principal must be **Member** on the workspace.
+
 ### 5. Labor Processing Secrets
 
 | Secret Name | Purpose | Used By |

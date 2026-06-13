@@ -143,6 +143,27 @@ def get_olap_password():
         return None
 
 
+def get_powerbi_credentials():
+    """
+    Get Power BI REST API credentials and dataset routing.
+
+    Auth uses the same service principal as Dataverse (app-client-id / app-client-secret).
+    Workspace/dataset IDs: Key Vault secrets powerbi-workspace-id / powerbi-dataset-id,
+    or env vars POWERBI_WORKSPACE_ID / POWERBI_DATASET_ID, or built-in defaults in modules/powerbi.py.
+    """
+    from modules.powerbi import get_powerbi_config
+
+    dv = get_dataverse_credentials()
+    config = get_powerbi_config()
+    return {
+        **dv,
+        **config,
+        "api_base": "https://api.powerbi.com/v1.0/myorg",
+        "scope": "https://analysis.windows.net/powerbi/api/.default",
+        "service_principal_object_id": "a9591855-4270-4364-9b09-190e89671e5b",
+    }
+
+
 if __name__ == "__main__":
     """Test Key Vault connectivity."""
     print("=" * 70)
