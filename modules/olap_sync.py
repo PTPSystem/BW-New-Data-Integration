@@ -11,8 +11,9 @@ from modules.utils.keyvault import get_secret, get_dataverse_credentials
 from modules.utils.config import load_config
 from modules.dataverse import get_dataverse_access_token, upsert_to_dataverse
 from modules.notifications import send_email_notification
-from modules.pipeline_config import load_pipelines, load_mapping, render_mdx_template
+from modules.pipeline_config import load_pipelines, load_mapping
 from modules.pipeline_runner import run_mdx_to_df, transform_df_to_records
+from modules.length_slicer import LengthError, length_arg, render_time_sliced_mdx
 import pandas as pd
 
 load_dotenv()
@@ -201,6 +202,12 @@ def main():
     pipelines = load_pipelines()
     available_pipelines = list(pipelines.keys())
     
+    def _length_arg(value: str) -> str:
+        try:
+            return length_arg(value)
+        except LengthError as exc:
+            raise argparse.ArgumentTypeError(str(exc)) from exc
+
     parser = argparse.ArgumentParser(description='Sync OLAP data to Dataverse')
     parser.add_argument(
         '--query',
@@ -210,15 +217,18 @@ def main():
     )
     parser.add_argument(
         '--length',
-        choices=['1wk', '2wk'],
+        type=_length_arg,
         default='2wk',
-        help='Time range: 1wk or 2wk (default)'
+        help=(
+            'Time range: 1wk, 2wk (default), or Nday/Ndays '
+            '(e.g. 3day, 30days). 7day and 14day use the same MyView slices as 1wk and 2wk.'
+        ),
     )
     parser.add_argument(
         '--fy',
         type=int,
         default=None,
-        help='Fiscal year slice (e.g., 2023). Overrides MyView-based --length slicing.'
+        help='Fiscal year slice (e.g., 2023). Overrides --length slicing.'
     )
     parser.add_argument(
         '--fp',
@@ -258,45 +268,16 @@ def main():
         p = pipelines[pipeline_name]
         mapping = load_mapping(p.mapping_path)
 
-        if period is not None and fiscal_year is None:
-            raise SystemExit("--fp requires --fy")
-
-        if fiscal_year is not None:
-            if pipeline_name in ('offers', 'sales_channel'):
-                # Both Offers and Sales Channel use 13-4 calendar dimensions.
-                if period is not None:
-                    if period < 1 or period > 13:
-                        raise SystemExit("--fp must be between 1 and 13")
-                    slicer = (
-                        f"[13-4 Calendar].[d_Year].[d_Year].&[{int(fiscal_year)}],"
-                        f"[13-4 Calendar].[d_Period].[d_Period].&[{int(period)}]"
-                    )
-                else:
-                    slicer = f"[13-4 Calendar].[d_Year].[d_Year].&[{int(fiscal_year)}]"
-            else:
-                # Other pipelines use regular Calendar hierarchy
-                if period is not None:
-                    # For pipelines with regular calendar, period is ignored but don't error
-                    print(f"⚠️  --fp is only supported for offers and sales_channel pipelines. Ignoring for {pipeline_name}.")
-                slicer = f"[Calendar].[Calendar Hierarchy].[Fiscal_Year].&[{int(fiscal_year)}]"
-
-            mdx = render_mdx_template(p.mdx, {"slicer": slicer})
-        elif length in ('1wk', '2wk'):
-            # All cubes now use numeric MyView IDs (81 for 1 week, 82 for 2 weeks)
-            myview_id = 81 if length == '1wk' else 82
-            
-            if pipeline_name == 'offers':
-                # Keep historical behavior (MyView + 13-4 All) as the default for offers.
-                slicer = (
-                    f"([MyView].[My View].[My View].&[{myview_id}],"
-                    "[13-4 Calendar].[Alternate Calendar Hierarchy].[All])"
-                )
-            else:
-                slicer = f"[MyView].[My View].[My View].&[{myview_id}]"
-
-            mdx = render_mdx_template(p.mdx, {"myview_id": myview_id, "slicer": slicer})
-        else:
-            raise SystemExit(f"Unknown length '{length}'")
+        try:
+            mdx = render_time_sliced_mdx(
+                p.mdx,
+                pipeline_name,
+                length,
+                fiscal_year=fiscal_year,
+                period=period,
+            )
+        except LengthError as exc:
+            raise SystemExit(str(exc)) from exc
 
         olap_server = os.getenv('OLAP_SERVER', cfg.get('olap', {}).get('server', 'https://ednacubes.papajohns.com:10502'))
         olap_catalog = p.catalog or os.getenv('OLAP_CATALOG', cfg.get('olap', {}).get('catalog', 'OARS Franchise'))

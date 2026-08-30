@@ -325,7 +325,10 @@ measures:
 
 ```bash
 python olap_to_dataverse.py --pipeline your_pipeline_name --length 1wk --print-mdx
+python olap_to_dataverse.py --pipeline your_pipeline_name --length 30day --print-mdx
 ```
+
+`--length` accepts `1wk`, `2wk` (default), or `Nday`/`Ndays` (for example `3day`, `30days`). `7day` and `14day` use the same MyView slices as `1wk` and `2wk`.
 
 This will:
 - Show the rendered MDX query
@@ -351,7 +354,7 @@ This will:
 
 **Record count is 0**
 - Your slicer may be filtering out all data
-- Try with `--length 1wk` to get recent data
+- Try with `--length 1wk` or `--length 3day` to get recent data
 - Verify the MyView ID exists in your cube
 
 ### 6c: Verify Output
