@@ -9,6 +9,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from modules.length_slicer import (
     LengthError,
     apply_last_n_days_subselect,
+    last_complete_business_date,
     last_n_calendar_days_set,
     length_arg,
     parse_length,
@@ -61,28 +62,33 @@ class ParseLengthTests(unittest.TestCase):
 
 
 class LastNDaysMdxTests(unittest.TestCase):
+    def test_last_complete_day_is_yesterday(self):
+        self.assertEqual(last_complete_business_date(date(2026, 8, 30)), date(2026, 8, 29))
+
     def test_set_expression_uses_explicit_date_members(self):
+        # Run date Aug 30 → 2 complete days are Aug 28 and Aug 29.
         expr = last_n_calendar_days_set(2, as_of=_AS_OF)
         self.assertEqual(
             expr,
-            "{[Calendar].[Calendar Date].[Calendar Date].&[2026-08-29], "
-            "[Calendar].[Calendar Date].[Calendar Date].&[2026-08-30]}",
+            "{[Calendar].[Calendar Date].[Calendar Date].&[2026-08-28], "
+            "[Calendar].[Calendar Date].[Calendar Date].&[2026-08-29]}",
         )
+        self.assertNotIn(".&[2026-08-30]", expr)
         self.assertNotIn("LastPeriods", expr)
         self.assertNotIn("Tail", expr)
 
     def test_thirty_day_range_is_inclusive(self):
         expr = last_n_calendar_days_set(30, as_of=_AS_OF)
-        self.assertIn(".&[2026-08-01]", expr)
-        self.assertIn(".&[2026-08-30]", expr)
-        self.assertNotIn(".&[2026-07-31]", expr)
+        self.assertIn(".&[2026-07-31]", expr)
+        self.assertIn(".&[2026-08-29]", expr)
+        self.assertNotIn(".&[2026-08-30]", expr)
         self.assertEqual(expr.count(".&["), 30)
 
     def test_subselect_wraps_from_clause(self):
         mdx = "SELECT ... FROM [OARS Franchise] WHERE ([MyView].[My View].[All])"
         wrapped = apply_last_n_days_subselect(mdx, 3, as_of=_AS_OF)
-        self.assertIn("FROM (SELECT {[Calendar].[Calendar Date].[Calendar Date].&[2026-08-28]", wrapped)
-        self.assertIn(".&[2026-08-30]} ON 0 FROM [OARS Franchise])", wrapped)
+        self.assertIn("FROM (SELECT {[Calendar].[Calendar Date].[Calendar Date].&[2026-08-27]", wrapped)
+        self.assertIn(".&[2026-08-29]} ON 0 FROM [OARS Franchise])", wrapped)
         self.assertIn("WHERE ([MyView].[My View].[All])", wrapped)
         self.assertNotIn("LastPeriods", wrapped)
 
@@ -107,8 +113,9 @@ class RenderPipelineMdxTests(unittest.TestCase):
             "30day",
             as_of=_AS_OF,
         )
-        self.assertIn(".&[2026-08-01]", mdx)
-        self.assertIn(".&[2026-08-30]", mdx)
+        self.assertIn(".&[2026-07-31]", mdx)
+        self.assertIn(".&[2026-08-29]", mdx)
+        self.assertNotIn(".&[2026-08-30]", mdx)
         self.assertIn("FROM (SELECT", mdx)
         self.assertIn("[MyView].[My View].[All]", mdx)
         self.assertNotIn("LastPeriods", mdx)
@@ -129,8 +136,9 @@ class RenderPipelineMdxTests(unittest.TestCase):
             self.pipelines["offers"].mdx, "offers", "5day", as_of=_AS_OF
         )
         self.assertIn("[13-4 Calendar].[Alternate Calendar Hierarchy].[All]", mdx)
-        self.assertIn(".&[2026-08-26]", mdx)
-        self.assertIn(".&[2026-08-30]", mdx)
+        self.assertIn(".&[2026-08-25]", mdx)
+        self.assertIn(".&[2026-08-29]", mdx)
+        self.assertNotIn(".&[2026-08-30]", mdx)
         self.assertIn("FROM (SELECT", mdx)
         self.assertIn("FROM [Offers])", mdx)
         self.assertNotIn("LastPeriods", mdx)
@@ -139,7 +147,7 @@ class RenderPipelineMdxTests(unittest.TestCase):
         mdx = render_time_sliced_mdx(
             self.pipelines["clock_in_out"].mdx, "clock_in_out", "3day", as_of=_AS_OF
         )
-        self.assertIn("FROM (SELECT {[Calendar].[Calendar Date].[Calendar Date].&[2026-08-28]", mdx)
+        self.assertIn("FROM (SELECT {[Calendar].[Calendar Date].[Calendar Date].&[2026-08-27]", mdx)
         self.assertIn("FROM [VBO])", mdx)
         self.assertNotIn("LastPeriods", mdx)
 

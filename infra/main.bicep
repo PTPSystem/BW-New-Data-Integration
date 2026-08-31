@@ -198,6 +198,12 @@ resource job 'Microsoft.App/jobs@2024-03-01' = {
               name: 'LOG_LEVEL'
               value: 'INFO'
             }
+            {
+              // N-day --length windows use this calendar date, not UTC.
+              // The slice ends yesterday (overnight-complete days only).
+              name: 'SYNC_TIMEZONE'
+              value: 'America/Chicago'
+            }
           ]
         }
       ]

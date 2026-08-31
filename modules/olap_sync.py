@@ -313,7 +313,13 @@ def main():
         )
 
         if df is None or len(df) == 0:
-            raise SystemExit("No data returned from OLAP")
+            print("⚠️  No data returned from OLAP; skipping upsert")
+            return {
+                "success": True,
+                "records_created": 0,
+                "records_updated": 0,
+                "errors": 0,
+            }
 
         records = transform_df_to_records(df, mapping)
         alternate_key = mapping.get('alternate_key', 'crf63_businesskey')

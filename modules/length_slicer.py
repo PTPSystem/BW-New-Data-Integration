@@ -1,10 +1,12 @@
 """Parse --length values and render time-slice MDX (MyView weeks or last-N-days)."""
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 from modules.pipeline_config import render_mdx_template
 
@@ -15,6 +17,7 @@ _FROM_CUBE_RE = re.compile(r"FROM\s+(\[[^\]]+\])", re.IGNORECASE)
 MYVIEW_1WK = 81
 MYVIEW_2WK = 82
 MAX_DAYS = 366
+DEFAULT_SYNC_TIMEZONE = "America/Chicago"
 
 
 class LengthError(ValueError):
@@ -85,15 +88,41 @@ def length_arg(value: str) -> str:
     return f"{parsed.days}day"
 
 
+def business_today() -> date:
+    """Calendar date in the franchise business timezone.
+
+    The Azure job runs in UTC, so ``date.today()`` can already be tomorrow
+    during a US evening run. Override with SYNC_TIMEZONE.
+    """
+    name = os.getenv("SYNC_TIMEZONE", DEFAULT_SYNC_TIMEZONE)
+    try:
+        tz = ZoneInfo(name)
+    except Exception:
+        tz = ZoneInfo(DEFAULT_SYNC_TIMEZONE)
+    return datetime.now(tz).date()
+
+
+def last_complete_business_date(as_of: Optional[date] = None) -> date:
+    """Last overnight-complete calendar date (yesterday relative to as_of).
+
+    Papa John's cube facts land after the overnight process, so "today" is
+    not a closed day. ``as_of`` is the run date; the window ends the day before.
+    """
+    run_date = as_of or business_today()
+    return run_date - timedelta(days=1)
+
+
 def last_n_calendar_days_set(days: int, as_of: Optional[date] = None) -> str:
-    """MDX set of the last N calendar dates ending on as_of (default: today).
+    """MDX set of the last N complete calendar dates.
+
+    Ends on yesterday (or the day before ``as_of`` if provided). Example: a
+    2day run on Aug 30 uses ``&[2026-08-28]`` and ``&[2026-08-29]``.
 
     Uses explicit ``&[YYYY-MM-DD]`` members. AtScale's XMLA endpoint does not
-    fully support LastPeriods or Tail, which is how an SSAS last-N slice
-    would normally be written.
+    fully support LastPeriods or Tail.
     """
     n = int(days)
-    end = as_of or date.today()
+    end = last_complete_business_date(as_of)
     members = [
         "[Calendar].[Calendar Date].[Calendar Date]."
         f"&[{(end - timedelta(days=n - 1 - offset)).isoformat()}]"
@@ -190,4 +219,7 @@ def render_time_sliced_mdx(
 
     slicer = unrestricted_slicer(pipeline_name)
     mdx = render_mdx_template(mdx_template, {"slicer": slicer})
+    end = last_complete_business_date(as_of)
+    start = end - timedelta(days=parsed.days - 1)
+    print(f"N-day window: {start.isoformat()} through {end.isoformat()} ({parsed.days} complete days)")
     return apply_last_n_days_subselect(mdx, parsed.days, as_of=as_of)

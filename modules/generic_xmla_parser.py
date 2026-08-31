@@ -99,7 +99,10 @@ class GenericXMLAParser:
                         measure_names.append(caption_elem.text)
         
         if not measure_names:
-            raise ValueError("No measures found on Axis0")
+            # AtScale returns a cellset with no Axis0 tuples when the date
+            # subselect matches no facts (empty NON EMPTY result).
+            log("No measures found on Axis0; returning empty DataFrame")
+            return pd.DataFrame()
         
         log(f"Found {len(measure_names)} measures: {measure_names}")
         
@@ -128,7 +131,8 @@ class GenericXMLAParser:
                 row_tuples.append(row_info)
         
         if not row_tuples:
-            raise ValueError("No row tuples found on Axis1")
+            log("No row tuples found on Axis1; returning empty DataFrame")
+            return pd.DataFrame()
         
         log(f"Found {len(row_tuples)} row tuples")
         
