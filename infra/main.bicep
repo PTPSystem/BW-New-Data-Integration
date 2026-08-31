@@ -130,7 +130,7 @@ resource environment 'Microsoft.App/managedEnvironments@2024-03-01' = {
 // Container App Job
 //
 // Trigger:   Schedule (cron, UTC)
-// Command:   entrypoint.sh → python olap_to_dataverse.py --query all --length 1wk --email yes
+// Command:   entrypoint.sh → python olap_to_dataverse.py --query all --length 2day --email yes
 // Auth:      User-assigned managed identity (no secrets)
 // Resources: 0.5 vCPU / 1 GiB RAM (matches your ~15 min runtime comfortably)
 // Timeout:   30 min (safety margin above the ~15 min runtime)
@@ -175,7 +175,7 @@ resource job 'Microsoft.App/jobs@2024-03-01' = {
             '--query'
             'all'
             '--length'
-            '1wk'
+            '2day'
             '--email'
             'yes'
           ]
