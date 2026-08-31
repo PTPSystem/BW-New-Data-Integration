@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from datetime import date, timedelta
 from typing import Optional
 
 from modules.pipeline_config import render_mdx_template
@@ -25,7 +26,8 @@ class ParsedLength:
     """Normalized --length value.
 
     Week slices use cube MyView members (81 = last 7 days, 82 = last 14 days).
-    Day slices use a Calendar Date LastPeriods subselect for arbitrary N.
+    Day slices use explicit Calendar Date members (AtScale does not support
+    LastPeriods or Tail).
     """
 
     kind: str  # "week" or "days"
@@ -83,34 +85,38 @@ def length_arg(value: str) -> str:
     return f"{parsed.days}day"
 
 
-def last_n_calendar_days_set(days: int) -> str:
-    """MDX set for the last N calendar dates up to the latest date <= Now()."""
+def last_n_calendar_days_set(days: int, as_of: Optional[date] = None) -> str:
+    """MDX set of the last N calendar dates ending on as_of (default: today).
+
+    Uses explicit ``&[YYYY-MM-DD]`` members. AtScale's XMLA endpoint does not
+    fully support LastPeriods or Tail, which is how an SSAS last-N slice
+    would normally be written.
+    """
     n = int(days)
-    return (
-        "{LastPeriods("
-        f"{n}, "
-        "Tail("
-        "Filter("
-        "[Calendar].[Calendar Date].[Calendar Date].Members, "
-        "[Calendar].[Calendar Date].CurrentMember.MemberValue <= Now()"
-        "), "
-        "1"
-        ").Item(0)"
-        ")}"
-    )
+    end = as_of or date.today()
+    members = [
+        "[Calendar].[Calendar Date].[Calendar Date]."
+        f"&[{(end - timedelta(days=n - 1 - offset)).isoformat()}]"
+        for offset in range(n)
+    ]
+    return "{" + ", ".join(members) + "}"
 
 
-def apply_last_n_days_subselect(mdx: str, days: int) -> str:
+def apply_last_n_days_subselect(
+    mdx: str, days: int, as_of: Optional[date] = None
+) -> str:
     """Wrap FROM [Cube] in a subselect that restricts Calendar Date to last N days.
 
     Calendar Date is already on ROWS in pipeline MDX, so it cannot also appear in
-    WHERE. A FROM subselect is the SSAS-safe way to slice the same hierarchy.
+    WHERE. A FROM subselect is the AtScale-safe way to slice the same hierarchy.
     """
     match = _FROM_CUBE_RE.search(mdx)
     if not match:
         raise LengthError("MDX is missing a FROM [Cube] clause")
     cube = match.group(1)
-    replacement = f"FROM (SELECT {last_n_calendar_days_set(days)} ON 0 FROM {cube})"
+    replacement = (
+        f"FROM (SELECT {last_n_calendar_days_set(days, as_of=as_of)} ON 0 FROM {cube})"
+    )
     return _FROM_CUBE_RE.sub(replacement, mdx, count=1)
 
 
@@ -164,6 +170,7 @@ def render_time_sliced_mdx(
     length: str,
     fiscal_year: Optional[int] = None,
     period: Optional[int] = None,
+    as_of: Optional[date] = None,
 ) -> str:
     """Render pipeline MDX with --fy/--fp or --length time slicing."""
     if period is not None and fiscal_year is None:
@@ -183,4 +190,4 @@ def render_time_sliced_mdx(
 
     slicer = unrestricted_slicer(pipeline_name)
     mdx = render_mdx_template(mdx_template, {"slicer": slicer})
-    return apply_last_n_days_subselect(mdx, parsed.days)
+    return apply_last_n_days_subselect(mdx, parsed.days, as_of=as_of)
