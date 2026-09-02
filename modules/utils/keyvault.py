@@ -134,6 +134,15 @@ def get_sharepoint_credentials():
     ])
 
 
+def get_labor_files_credentials():
+    """Get Papa John's files.papajohns.com portal credentials."""
+    return get_all_secrets([
+        'files-url',
+        'files-username',
+        'files-password',
+    ])
+
+
 def get_olap_password():
     """Get OLAP password if stored in Key Vault."""
     try:
