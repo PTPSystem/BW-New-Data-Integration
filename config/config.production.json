@@ -27,6 +27,7 @@
     "table_names": {
       "olap_bi_data": "crf63_olapbidatas",
       "labor_headcount": "crf63_laborheadcounts",
+      "labor_times": "crf63_labortimes",
       "sales_forecast": "crf63_bwsalesforecasts"
     }
   },
@@ -55,6 +56,10 @@
     "login_url": "https://files.papajohns.com/Web/Account/Login.htm",
     "download_dir": "/tmp/labor/download",
     "extract_dir": "/tmp/labor/extract",
+    "dataverse_table": "crf63_labortimes",
+    "output_file": "",
+    "store_list_excel": "",
+    "ssl_verify": false,
     "config_date": "",
     "day_parts": {
       "Morning": [8.0, 10.0],
