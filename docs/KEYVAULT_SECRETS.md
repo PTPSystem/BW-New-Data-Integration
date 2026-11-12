@@ -35,12 +35,15 @@
 
 **Note**: SharePoint uses the same `app-client-id` and `app-client-secret` as Dataverse since they share the same app registration.
 
-### 4. OLAP Server Secrets
+### 4. OLAP / AtScale Secrets
 
 | Secret Name | Purpose | Used By |
 |-------------|---------|---------|
-| `olap-username` | OLAP server authentication username | `olap_to_dataverse.py` |
-| `olap-password` | OLAP server authentication password | `olap_to_dataverse.py` |
+| `atscale-api-token` | Bearer token for AtScale public SQL API (`/v1/query`) | OARS queries after ednacubes shutdown — see [ATSCALE_API_TOKEN.md](./ATSCALE_API_TOKEN.md) |
+| `olap-username` | Legacy OLAP Basic auth username (`ednacubes`) | `olap_to_dataverse.py` (legacy) |
+| `olap-password` | Legacy OLAP Basic auth password (`ednacubes`) | `olap_to_dataverse.py` (legacy) |
+
+**Token source:** [AtScale Design Center](https://atscale.papajohns.com/design-center/) → Account → **API Token**.
 
 ### 4b. Power BI / Beachwood Daily (Optional Routing)
 
