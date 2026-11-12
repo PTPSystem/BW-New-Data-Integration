@@ -7,13 +7,18 @@ from typing import Optional
 from dotenv import load_dotenv
 
 # Import local modules
-from modules.utils.keyvault import get_secret, get_dataverse_credentials
+from modules.utils.keyvault import get_secret, get_dataverse_credentials, get_atscale_api_token
 from modules.utils.config import load_config
 from modules.dataverse import get_dataverse_access_token, upsert_to_dataverse
 from modules.notifications import send_email_notification
 from modules.pipeline_config import load_pipelines, load_mapping
-from modules.pipeline_runner import run_mdx_to_df, transform_df_to_records
-from modules.length_slicer import LengthError, length_arg, render_time_sliced_mdx
+from modules.pipeline_runner import run_mdx_to_df, run_sql_to_df, transform_df_to_records
+from modules.length_slicer import (
+    LengthError,
+    length_arg,
+    render_time_sliced_mdx,
+    render_time_sliced_sql,
+)
 import pandas as pd
 
 load_dotenv()
@@ -267,23 +272,13 @@ def main():
 
         p = pipelines[pipeline_name]
         mapping = load_mapping(p.mapping_path)
-
-        try:
-            mdx = render_time_sliced_mdx(
-                p.mdx,
-                pipeline_name,
-                length,
-                fiscal_year=fiscal_year,
-                period=period,
-            )
-        except LengthError as exc:
-            raise SystemExit(str(exc)) from exc
-
-        olap_server = os.getenv('OLAP_SERVER', cfg.get('olap', {}).get('server', 'https://ednacubes.papajohns.com:10502'))
-        olap_catalog = p.catalog or os.getenv('OLAP_CATALOG', cfg.get('olap', {}).get('catalog', 'OARS Franchise'))
-        olap_ssl_verify = bool(cfg.get('olap', {}).get('ssl_verify', False))
-        olap_username = get_secret('olap-username')
-        olap_password = get_secret('olap-password')
+        olap_cfg = cfg.get("olap") or {}
+        backend = (
+            os.getenv("OLAP_BACKEND")
+            or olap_cfg.get("backend")
+            or "atscale"
+        ).lower()
+        use_atscale = backend == "atscale" and bool(p.sql)
 
         dv_creds = get_dataverse_credentials()
         dataverse_url = dv_creds['environment_url']
@@ -292,25 +287,96 @@ def main():
         client_secret = dv_creds['client_secret']
 
         print(f"Running pipeline: {p.name}")
-        print(f"OLAP Catalog: {olap_catalog}")
+        print(f"Backend: {backend}")
         print(f"Dataverse Table: {mapping.get('table')}")
 
-        if args.print_mdx:
-            print("\n--- Rendered MDX ---")
-            print(mdx)
-            print("--- End MDX ---\n")
+        if use_atscale:
+            try:
+                sql = render_time_sliced_sql(
+                    p.sql,
+                    length,
+                    fiscal_year=fiscal_year,
+                    period=period,
+                )
+            except LengthError as exc:
+                raise SystemExit(str(exc)) from exc
 
-        dataverse_token = get_dataverse_access_token(dataverse_url, client_id, client_secret, tenant_id)
-        df = run_mdx_to_df(
-            xmla_server=olap_server,
-            catalog=olap_catalog,
-            username=olap_username,
-            password=olap_password,
-            mdx=mdx,
-            parser=p.parser,
-            hierarchy_mappings=p.hierarchy_mappings,
-            ssl_verify=olap_ssl_verify,
-        )
+            atscale_cfg = olap_cfg.get("atscale") or {}
+            api_url = atscale_cfg.get("api_url") or "https://atscale.papajohns.com/v1/query"
+            project = (
+                p.atscale_project
+                or atscale_cfg.get("project")
+                or "OARS"
+            )
+            environment = atscale_cfg.get("environment") or "default"
+            timeout = atscale_cfg.get("timeout") or "300s"
+            print(f"AtScale project: {project}")
+
+            if args.print_mdx:
+                print("\n--- Rendered SQL ---")
+                print(sql)
+                print("--- End SQL ---\n")
+
+            dataverse_token = get_dataverse_access_token(
+                dataverse_url, client_id, client_secret, tenant_id
+            )
+            token = get_atscale_api_token()
+            df = run_sql_to_df(
+                sql=sql,
+                token=token,
+                api_url=api_url,
+                project=project,
+                environment=environment,
+                timeout=timeout,
+            )
+        else:
+            if backend == "atscale" and not p.sql:
+                raise SystemExit(
+                    f"Pipeline '{pipeline_name}' has no SQL template; "
+                    "set olap.backend=xmla for legacy MDX or add a sql: block."
+                )
+            try:
+                mdx = render_time_sliced_mdx(
+                    p.mdx,
+                    pipeline_name,
+                    length,
+                    fiscal_year=fiscal_year,
+                    period=period,
+                )
+            except LengthError as exc:
+                raise SystemExit(str(exc)) from exc
+
+            olap_server = os.getenv(
+                "OLAP_SERVER",
+                olap_cfg.get("server", "https://ednacubes.papajohns.com:10502"),
+            )
+            olap_catalog = (
+                p.catalog
+                or os.getenv("OLAP_CATALOG", olap_cfg.get("catalog", "OARS Franchise"))
+            )
+            olap_ssl_verify = bool(olap_cfg.get("ssl_verify", False))
+            olap_username = get_secret("olap-username")
+            olap_password = get_secret("olap-password")
+            print(f"OLAP Catalog: {olap_catalog}")
+
+            if args.print_mdx:
+                print("\n--- Rendered MDX ---")
+                print(mdx)
+                print("--- End MDX ---\n")
+
+            dataverse_token = get_dataverse_access_token(
+                dataverse_url, client_id, client_secret, tenant_id
+            )
+            df = run_mdx_to_df(
+                xmla_server=olap_server,
+                catalog=olap_catalog,
+                username=olap_username,
+                password=olap_password,
+                mdx=mdx,
+                parser=p.parser,
+                hierarchy_mappings=p.hierarchy_mappings,
+                ssl_verify=olap_ssl_verify,
+            )
 
         if df is None or len(df) == 0:
             print("⚠️  No data returned from OLAP; skipping upsert")

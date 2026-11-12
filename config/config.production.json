@@ -17,10 +17,17 @@
   },
   
   "olap": {
+    "backend": "atscale",
     "server": "https://ednacubes.papajohns.com:10502",
     "catalog": "OARS Franchise",
     "ssl_verify": false,
-    "timeout_seconds": 300
+    "timeout_seconds": 300,
+    "atscale": {
+      "api_url": "https://atscale.papajohns.com/v1/query",
+      "project": "OARS",
+      "environment": "default",
+      "timeout": "300s"
+    }
   },
   
   "dataverse": {

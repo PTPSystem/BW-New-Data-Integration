@@ -13,6 +13,7 @@ from modules.olap import (
     parse_offers_response,
     parse_inventory_response,
 )
+from modules.atscale import query_atscale_sql_df
 from modules.generic_xmla_parser import GenericXMLAParser
 
 
@@ -27,6 +28,28 @@ _PARSERS = {
     "offers": parse_offers_response,
     "inventory": parse_inventory_response,
 }
+
+
+def run_sql_to_df(
+    *,
+    sql: str,
+    token: str,
+    api_url: str,
+    project: str,
+    environment: str = "default",
+    timeout: str = "300s",
+    logger=None,
+) -> pd.DataFrame:
+    """Run AtScale SQL and return a DataFrame with mapping-friendly column names."""
+    return query_atscale_sql_df(
+        sql,
+        token,
+        api_url=api_url,
+        project=project,
+        environment=environment,
+        timeout=timeout,
+        logger=logger,
+    )
 
 
 def run_mdx_to_df(

@@ -61,6 +61,14 @@ Also useful:
 - `GET https://atscale.papajohns.com/v1/catalogs` — list deployed catalogs/models  
 - Prefer explicit columns/measures; `SELECT * FROM OARS` often fails planning
 
+## Code path (this repo)
+
+- Config: `olap.backend: "atscale"` in `config/config.*.json` (override with env `OLAP_BACKEND=xmla` for legacy).
+- Secret loader: `modules.utils.keyvault.get_atscale_api_token()`.
+- Client: `modules/atscale.py` → `POST /v1/query`.
+- Pipelines with a `sql:` block (starting with `daily_sales`) use AtScale SQL when backend is `atscale`.
+- Legacy MDX/`ednacubes` remains available via `OLAP_BACKEND=xmla` for pipelines that still only have `mdx:`.
+
 ## Related endpoints (for reference)
 
 | Kind | Endpoint | Notes |
