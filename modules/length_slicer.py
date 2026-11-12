@@ -193,6 +193,57 @@ def fiscal_slicer(pipeline_name: str, fiscal_year: int, period: Optional[int] = 
     return f"[Calendar].[Calendar Hierarchy].[Fiscal_Year].&[{int(fiscal_year)}]"
 
 
+def length_to_day_count(length: str) -> int:
+    """Convert --length into number of complete calendar days."""
+    parsed = parse_length(length)
+    if parsed.kind == "week":
+        return 7 if parsed.weeks == 1 else 14
+    return int(parsed.days)
+
+
+def sql_date_window(
+    length: str,
+    as_of: Optional[date] = None,
+) -> tuple[date, date]:
+    """Inclusive start/end dates for SQL WHERE Calendar Date BETWEEN …"""
+    days = length_to_day_count(length)
+    end = last_complete_business_date(as_of)
+    start = end - timedelta(days=days - 1)
+    return start, end
+
+
+def render_time_sliced_sql(
+    sql_template: str,
+    length: str,
+    fiscal_year: Optional[int] = None,
+    period: Optional[int] = None,
+    as_of: Optional[date] = None,
+) -> str:
+    """Render pipeline SQL with ``${start_date}`` / ``${end_date}`` (or FY filters)."""
+    if period is not None and fiscal_year is None:
+        raise LengthError("--fp requires --fy")
+
+    if fiscal_year is not None:
+        # Calendar fiscal year attribute on OARS SQL model
+        if period is not None:
+            raise LengthError("AtScale SQL path does not yet support --fp; use --fy or --length")
+        return render_mdx_template(
+            sql_template,
+            {
+                "start_date": f"{int(fiscal_year)}-01-01",
+                "end_date": f"{int(fiscal_year)}-12-31",
+                "fiscal_year": int(fiscal_year),
+            },
+        )
+
+    start, end = sql_date_window(length, as_of=as_of)
+    print(f"SQL date window: {start.isoformat()} through {end.isoformat()}")
+    return render_mdx_template(
+        sql_template,
+        {"start_date": start.isoformat(), "end_date": end.isoformat()},
+    )
+
+
 def render_time_sliced_mdx(
     mdx_template: str,
     pipeline_name: str,

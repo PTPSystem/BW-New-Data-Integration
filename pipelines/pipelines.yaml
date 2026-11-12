@@ -8,6 +8,7 @@
 pipelines:
   daily_sales:
     catalog: OARS Franchise
+    atscale_project: OARS
     parser: celldata
     mapping: mappings/daily_sales.yaml
     hierarchy_mappings:
@@ -15,6 +16,62 @@ pipelines:
         field: "StoreNumber"
       - pattern: "Calendar.*Date"
         field: "CalendarDate"
+    # Preferred path after ednacubes shutdown: AtScale public SQL API
+    sql: |-
+      SELECT
+        `Store Number`,
+        `Calendar Date`,
+        SUM(`TY Net Sales USD`) AS `TY Net Sales USD`,
+        SUM(`L2Y Comp Net Sales USD`) AS `L2Y Comp Net Sales USD`,
+        SUM(`L3Y Comp Net Sales USD`) AS `L3Y Comp Net Sales USD`,
+        SUM(`LY Comp Net Sales USD`) AS `LY Comp Net Sales USD`,
+        SUM(`TY Target Food Cost USD`) AS `TY Target Food Cost USD`,
+        SUM(`Actual Food Cost USD`) AS `Actual Food Cost USD`,
+        SUM(`FLMD USD`) AS `FLMD USD`,
+        SUM(`Target Profit after FLM Local (Fran)`) AS `Target Profit after FLM Local (Fran)`,
+        SUM(`Actual FLM w/o Vacation Accrual Local`) AS `Actual FLM w/o Vacation Accrual Local`,
+        SUM(`Actual Labor $ USD`) AS `Actual Labor $ USD`,
+        SUM(`HS Total Actual Hours`) AS `HS Total Actual Hours`,
+        SUM(`Store Days`) AS `Store Days`,
+        SUM(`Make Time Minutes`) AS `Make Time Minutes`,
+        SUM(`TY Orders`) AS `TY Orders`,
+        SUM(`Rack Time Minutes`) AS `Rack Time Minutes`,
+        SUM(`Total OTD Time (Hours)`) AS `Total OTD Time (Hours)`,
+        SUM(`Deliveries`) AS `Deliveries`,
+        SUM(`BOZOCORO Orders`) AS `BOZOCORO Orders`,
+        SUM(`OTD Order Count`) AS `OTD Order Count`,
+        SUM(`Total Cash Over/Short USD`) AS `Total Cash Over/Short USD`,
+        SUM(`LY Orders`) AS `LY Orders`,
+        SUM(`TY Total OSAT Survey Count`) AS `TY Total OSAT Survey Count`,
+        SUM(`TY OSAT Satisfied Survey Count`) AS `TY OSAT Satisfied Survey Count`,
+        SUM(`Total Calls`) AS `Total Calls`,
+        SUM(`Answered Calls`) AS `Answered Calls`,
+        SUM(`FLMDPC USD (Fran)`) AS `FLMDPC USD (Fran)`,
+        SUM(`m_ty_agg_commission_local_sum`) AS `m_ty_agg_commission_local_sum`,
+        SUM(`TY Dispatched Delivery Orders`) AS `TY Dispatched Delivery Orders`,
+        AVG(`Avg TTDT`) AS `Avg TTDT`,
+        SUM(`Mileage Cost Local`) AS `Mileage Cost Local`,
+        SUM(`Discounts USD`) AS `Discounts USD`,
+        SUM(`TY Total Order Accuracy Survey Count`) AS `TY Total Order Accuracy Survey Count`,
+        AVG(`Order Accuracy %`) AS `Order Accuracy %`,
+        AVG(`SMG Avg Closure`) AS `SMG Avg Closure`,
+        SUM(`SMG Cases Opened`) AS `SMG Cases Opened`,
+        SUM(`SMG Cases Resolved`) AS `SMG Cases Resolved`,
+        AVG(`SMG Value %`) AS `SMG Value %`,
+        SUM(`Singles`) AS `Singles`,
+        SUM(`Doubles`) AS `Doubles`,
+        SUM(`Triples Plus`) AS `Triples Plus`,
+        SUM(`Runs`) AS `Runs`,
+        SUM(`TTDT Orders`) AS `TTDT Orders`,
+        SUM(`To The Door Time for Dispatch Orders`) AS `To The Door Time for Dispatch Orders`,
+        AVG(`To The Door Time Minutes`) AS `To The Door Time Minutes`,
+        SUM(`TY Taste Of Food Good Survey Count`) AS `TY Taste Of Food Good Survey Count`,
+        SUM(`TY Total Taste Of Food Survey Count`) AS `TY Total Taste Of Food Survey Count`,
+        SUM(`TY Order Accuracy Good Survey Count`) AS `TY Order Accuracy Good Survey Count`
+      FROM OARS
+      WHERE `Calendar Date` BETWEEN DATE '${start_date}' AND DATE '${end_date}'
+      GROUP BY `Store Number`, `Calendar Date`
+      ORDER BY `Calendar Date`, `Store Number`
     mdx: |-
       SELECT 
       {
@@ -78,6 +135,7 @@ pipelines:
 
   sales_channel:
     catalog: OARS Franchise
+    atscale_project: OARS
     parser: sales_channel_daily
     mapping: mappings/sales_channel.yaml
     hierarchy_mappings:
@@ -91,6 +149,22 @@ pipelines:
         field: "SourceChannel"
       - pattern: "Day Part.*Day Part"
         field: "DayPart"
+    sql: |-
+      SELECT
+        `Store Number`,
+        `Calendar Date`,
+        `Source Actor`,
+        `Source Channel`,
+        `Day Part`,
+        SUM(`TY Net Sales USD`) AS `TY Net Sales USD`,
+        SUM(`TY Orders`) AS `TY Orders`,
+        SUM(`Discounts USD`) AS `Discounts USD`,
+        SUM(`LY Net Sales USD`) AS `LY Net Sales USD`,
+        SUM(`LY Orders`) AS `LY Orders`
+      FROM OARS
+      WHERE `Calendar Date` BETWEEN DATE '${start_date}' AND DATE '${end_date}'
+      GROUP BY `Store Number`, `Calendar Date`, `Source Actor`, `Source Channel`, `Day Part`
+      ORDER BY `Calendar Date`, `Store Number`
     mdx: |-
       SELECT {[Measures].[TY Net Sales USD],[Measures].[TY Orders],[Measures].[Discounts USD],[Measures].[LY Net Sales USD],[Measures].[LY Orders]} DIMENSION PROPERTIES PARENT_UNIQUE_NAME,HIERARCHY_UNIQUE_NAME ON COLUMNS , 
       NON EMPTY CrossJoin(CrossJoin(CrossJoin(CrossJoin(Hierarchize({[Stores].[Store Number].[Store Number].AllMembers}), Hierarchize({[Calendar].[Calendar Date].[Calendar Date].AllMembers})), Hierarchize({[Source Channel].[Source Actor].[Source Actor].AllMembers})), 
@@ -99,6 +173,7 @@ pipelines:
 
   offers:
     catalog: Offers
+    atscale_project: Offers
     parser: offers
     mapping: mappings/offers.yaml
     hierarchy_mappings:
@@ -110,6 +185,24 @@ pipelines:
         field: "OfferCode"
       - pattern: "Offer.*POS Description"
         field: "OfferPOSDescription"
+    sql: |-
+      SELECT
+        `Store Number`,
+        `Calendar Date`,
+        `Offer Code`,
+        `Offer POS Description`,
+        SUM(`Redeemed Count`) AS `Redeemed Count`,
+        SUM(`Discount Amount USD`) AS `Discount Amount USD`,
+        SUM(`Gross Margin USD`) AS `Gross Margin USD`,
+        AVG(`Order Mix %`) AS `Order Mix %`,
+        AVG(`Sales Mix USD %`) AS `Sales Mix USD %`,
+        SUM(`Net Sales USD`) AS `Net Sales USD`,
+        SUM(`Order Count`) AS `Order Count`,
+        SUM(`Target Food Cost USD`) AS `Target Food Cost USD`
+      FROM Offers
+      WHERE `Calendar Date` BETWEEN DATE '${start_date}' AND DATE '${end_date}'
+      GROUP BY `Store Number`, `Calendar Date`, `Offer Code`, `Offer POS Description`
+      ORDER BY `Calendar Date`, `Store Number`
     mdx: |-
       SELECT {
           [Measures].[Redeemed Count],
@@ -134,6 +227,7 @@ pipelines:
 
   inventory:
     catalog: OARS Franchise
+    atscale_project: OARS
     parser: inventory
     mapping: mappings/inventory.yaml
     hierarchy_mappings:
@@ -145,6 +239,17 @@ pipelines:
         field: "StoreNumber"
       - pattern: ".*Item_Description"
         field: "ItemDescription"
+    sql: |-
+      SELECT
+        `Store Number`,
+        `Calendar Date`,
+        `Item_Number`,
+        `Item_Description`,
+        SUM(`Qty On Hand`) AS `Qty On Hand`
+      FROM OARS
+      WHERE `Calendar Date` BETWEEN DATE '${start_date}' AND DATE '${end_date}'
+      GROUP BY `Store Number`, `Calendar Date`, `Item_Number`, `Item_Description`
+      ORDER BY `Calendar Date`, `Store Number`, `Item_Number`
     mdx: |-
       SELECT {[Measures].[Qty On Hand]} 
       DIMENSION PROPERTIES PARENT_UNIQUE_NAME,HIERARCHY_UNIQUE_NAME ON COLUMNS, 
@@ -160,6 +265,7 @@ pipelines:
 
   clock_in_out:
     catalog: VBO
+    atscale_project: VBO
     parser: celldata
     mapping: mappings/clock_in_out.yaml
     hierarchy_mappings:
@@ -171,6 +277,24 @@ pipelines:
         field: "EmployeeName"
       - pattern: "System User ID.*System_User_ID"
         field: "SystemUserID"
+    sql: |-
+      SELECT
+        `Store Number`,
+        `Calendar Date`,
+        `Employee_Name Level`,
+        `System_User_ID Level`,
+        MAX(`Actual Clock In Ts`) AS `Actual Clock In Ts`,
+        MAX(`Actual Clock Out Ts`) AS `Actual Clock Out Ts`,
+        SUM(`m_reg_hours_worked_sum`) AS `m_reg_hours_worked_sum`,
+        SUM(`m_ovt_hours_worked_sum`) AS `m_ovt_hours_worked_sum`,
+        SUM(`m_total_hours_worked_sum`) AS `m_total_hours_worked_sum`,
+        SUM(`m_total_pay_usd_sum`) AS `m_total_pay_usd_sum`,
+        SUM(`m_reg_pay_usd_sum`) AS `m_reg_pay_usd_sum`,
+        SUM(`m_ovt_pay_usd_sum`) AS `m_ovt_pay_usd_sum`
+      FROM VBO
+      WHERE `Calendar Date` BETWEEN DATE '${start_date}' AND DATE '${end_date}'
+      GROUP BY `Store Number`, `Calendar Date`, `Employee_Name Level`, `System_User_ID Level`
+      ORDER BY `Calendar Date`, `Store Number`
     mdx: |-
       SELECT {
           [Measures].[Actual Clock In Ts],

@@ -15,6 +15,8 @@ class PipelineDefinition:
     mapping_path: str
     catalog: Optional[str] = None
     hierarchy_mappings: Optional[List[Dict[str, str]]] = None
+    sql: Optional[str] = None
+    atscale_project: Optional[str] = None
 
 
 def render_mdx_template(mdx: str, variables: Dict[str, Any] | None = None) -> str:
@@ -52,12 +54,14 @@ def load_pipelines(pipelines_file: str | None = None) -> Dict[str, PipelineDefin
         if not isinstance(cfg, dict):
             raise ValueError(f"Pipeline '{name}' must be a mapping")
         mdx = (cfg.get("mdx") or "").strip("\n")
+        sql = (cfg.get("sql") or "").strip("\n") or None
         parser = cfg.get("parser")
         mapping = cfg.get("mapping")
         catalog = cfg.get("catalog")
         hierarchy_mappings = cfg.get("hierarchy_mappings")
-        if not mdx:
-            raise ValueError(f"Pipeline '{name}' is missing mdx")
+        atscale_project = cfg.get("atscale_project")
+        if not mdx and not sql:
+            raise ValueError(f"Pipeline '{name}' is missing mdx/sql")
         if not parser:
             raise ValueError(f"Pipeline '{name}' is missing parser")
         if not mapping:
@@ -69,11 +73,13 @@ def load_pipelines(pipelines_file: str | None = None) -> Dict[str, PipelineDefin
 
         out[name] = PipelineDefinition(
             name=name,
-            mdx=mdx,
+            mdx=mdx or "",
             parser=str(parser),
             mapping_path=mapping_path,
             catalog=str(catalog) if catalog else None,
             hierarchy_mappings=hierarchy_mappings,
+            sql=sql,
+            atscale_project=str(atscale_project) if atscale_project else None,
         )
 
     return out

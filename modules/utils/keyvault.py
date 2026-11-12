@@ -152,6 +152,11 @@ def get_olap_password():
         return None
 
 
+def get_atscale_api_token():
+    """Bearer token for AtScale public SQL API (/v1/query). See docs/ATSCALE_API_TOKEN.md."""
+    return get_secret("atscale-api-token")
+
+
 def get_powerbi_credentials():
     """
     Get Power BI REST API credentials and dataset routing.
