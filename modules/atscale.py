@@ -115,6 +115,16 @@ DEFAULT_COLUMN_RENAMES = {
     "Source Actor": "SourceActor",
     "Source Channel": "SourceChannel",
     "Day Part": "DayPart",
+    "Offer Code": "OfferCode",
+    "Offer POS Description": "OfferPOSDescription",
+    "Item_Number": "ItemNumber",
+    "Item_Description": "ItemDescription",
+    "Employee Name": "EmployeeName",
+    "System User ID": "SystemUserID",
+    "Employee_Name": "EmployeeName",
+    "System_User_ID": "SystemUserID",
+    "Employee_Name Level": "EmployeeName",
+    "System_User_ID Level": "SystemUserID",
 }
 
 
