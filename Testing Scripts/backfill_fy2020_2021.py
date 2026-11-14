@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Backfill FY2020–FY2021 across all pipelines.
 
-This script is additive (no delete phase) — it upserts records for FY2020 and
-FY2021 without touching any existing data.
+This script is additive (no delete phase) — it upserts FY2020 and FY2021
+rows into Neon Postgres (DATABASE_URL) without deleting existing rows.
 
 Supported pipelines:
   daily_sales     (OARS Franchise — Calendar hierarchy)
@@ -26,8 +26,8 @@ from datetime import datetime
 from dataclasses import dataclass
 from typing import Dict, List
 
-from modules.dataverse import get_dataverse_access_token, upsert_to_dataverse
-from modules.utils.keyvault import get_secret, get_dataverse_credentials
+from modules.neon_sink import spec_from_mapping, upsert_records
+from modules.utils.keyvault import get_secret
 from modules.pipeline_config import load_mapping, load_pipelines, render_mdx_template
 from modules.pipeline_runner import run_mdx_to_df, transform_df_to_records
 from modules.utils.config import load_config
@@ -133,19 +133,6 @@ def main() -> int:
     cfg = load_config()
     pipelines = load_pipelines()
 
-    dv_creds = get_dataverse_credentials()
-    dataverse_url = dv_creds["environment_url"]
-    client_id = dv_creds["client_id"]
-    tenant_id = dv_creds["tenant_id"]
-    client_secret = dv_creds["client_secret"]
-
-    token = get_dataverse_access_token(dataverse_url, client_id, client_secret, tenant_id)
-
-    def refresh_auth() -> str:
-        nonlocal token
-        token = get_dataverse_access_token(dataverse_url, client_id, client_secret, tenant_id)
-        return token
-
     olap_server = os.getenv(
         "OLAP_SERVER",
         cfg.get("olap", {}).get("server", "https://ednacubes.papajohns.com:10502"),
@@ -168,8 +155,9 @@ def main() -> int:
         if not p:
             raise SystemExit(f"Missing pipeline '{t.pipeline_name}' in pipelines.yaml")
         mapping = load_mapping(p.mapping_path)
+        table_spec = spec_from_mapping(mapping)
 
-        print(f"\n==> Backfilling {t.pipeline_name} for {FY_YEARS} ...")
+        print(f"\n==> Backfilling {t.pipeline_name} into Neon {table_spec.name} for {FY_YEARS} ...")
 
         for fy in FY_YEARS:
             print(f"  FY{fy}: querying OLAP ...")
@@ -194,12 +182,9 @@ def main() -> int:
                 print(f"    ⚠ No rows returned for {t.pipeline_name} FY{fy}")
                 continue
 
-            print(f"    {len(df):,} rows returned; upserting to Dataverse ...")
-            refresh_auth()
+            print(f"    {len(df):,} rows returned; upserting to Neon ...")
             records = transform_df_to_records(df, mapping)
-            created, updated, errors = upsert_to_dataverse(
-                dataverse_url, token, mapping["table"], records
-            )
+            created, updated, errors = upsert_records(records, table_spec)
             print(f"    ✓ FY{fy}: {created} created, {updated} updated, {errors} errors")
             total_created += created
             total_updated += updated

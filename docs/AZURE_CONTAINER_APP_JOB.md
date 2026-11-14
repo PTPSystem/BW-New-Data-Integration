@@ -16,6 +16,8 @@ Azure Container App Job (Consumption, serverless)
     ├─► Pulls image from ACR via Managed Identity
     └─► Reads Key Vault secrets via Managed Identity
             └─► Runs: python olap_to_dataverse.py --query all --length 1wk --email yes
+                Writes to Neon Postgres via DATABASE_URL (secure Container App secret `databaseUrl`).
+                Leave `databaseUrl` empty until the dedicated Neon project exists.
 ```
 
 **No credentials are stored in the job or in GitHub Secrets** (except non-sensitive IDs).

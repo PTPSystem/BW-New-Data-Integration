@@ -1,4 +1,4 @@
-"""Download Papa John's labor files and upsert day-part hours to Dataverse."""
+"""Download Papa John's labor files and upsert day-part hours to Neon Postgres."""
 import argparse
 import logging
 import os
@@ -16,7 +16,11 @@ from modules.utils.config import load_config
 def main() -> int:
     parser = argparse.ArgumentParser(description="Download PPJ labor ZIPs and load day-part hours")
     parser.add_argument("--date", default="", help="Target file date YYYYMMDD (default: latest on the portal)")
-    parser.add_argument("--skip-dataverse", action="store_true", help="Download and process only; do not upsert")
+    parser.add_argument(
+        "--skip-dataverse",
+        action="store_true",
+        help="Download and process only; do not upsert to Neon (flag name kept for existing cron jobs)",
+    )
     parser.add_argument("--keep-temp", action="store_true", help="Leave downloaded/extracted files in place")
     parser.add_argument("--csv", default="", help="Optional CSV output path")
     parser.add_argument("--email", choices=["yes", "no"], default="no", help="Send a summary email")
@@ -31,7 +35,7 @@ def main() -> int:
     print("=" * 80)
     print("Labor file download → day-part hours")
     print(f"Date: {args.date or 'latest'}")
-    print(f"Dataverse: {'skip' if args.skip_dataverse else 'upsert'}")
+    print(f"Neon: {'skip' if args.skip_dataverse else 'upsert'}")
     print("=" * 80)
 
     try:

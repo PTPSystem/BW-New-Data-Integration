@@ -1,4 +1,5 @@
-# Pipeline definitions for MDX → Dataverse sync.
+# Pipeline definitions for MDX/SQL → Neon Postgres sync.
+# Mapping files still use `dataverse:` as the column name; those names are the Neon columns.
 # Each pipeline specifies:
 # - OLAP catalog (optional; defaults to config olap.catalog)
 # - MDX query template (string)

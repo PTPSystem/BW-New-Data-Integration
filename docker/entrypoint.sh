@@ -24,6 +24,15 @@ fi
 echo ""
 
 # Test Azure Key Vault connectivity
+if [ -n "$DATABASE_URL" ]; then
+    echo "✓ DATABASE_URL is set (Neon write target)"
+else
+    echo "⚠ DATABASE_URL is not set"
+    echo "  ETL writes to Neon will fail until a connection string is provided"
+fi
+echo ""
+
+# Test Azure Key Vault connectivity
 echo "Testing Azure Key Vault connectivity..."
 python -c "
 from modules.utils.keyvault import get_secret_client

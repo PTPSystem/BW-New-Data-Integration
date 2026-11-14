@@ -26,6 +26,24 @@ param imageTag string = 'latest'
 @description('Cron schedule (UTC). Default: 6:00 AM and 6:00 PM UTC every day.')
 param cronSchedule string = '0 6,18 * * *'
 
+@description('Neon connection string for ETL writes. Leave empty until the dedicated project exists. Do not commit a real value.')
+@secure()
+param databaseUrl string = ''
+
+var databaseSecret = !empty(databaseUrl) ? [
+  {
+    name: 'database-url'
+    value: databaseUrl
+  }
+] : []
+
+var databaseEnv = !empty(databaseUrl) ? [
+  {
+    name: 'DATABASE_URL'
+    secretRef: 'database-url'
+  }
+] : []
+
 // ---------------------------------------------------------------------------
 // Variables
 // ---------------------------------------------------------------------------
@@ -131,7 +149,8 @@ resource environment 'Microsoft.App/managedEnvironments@2024-03-01' = {
 //
 // Trigger:   Schedule (cron, UTC)
 // Command:   entrypoint.sh → python olap_to_dataverse.py --query all --length 2day --email yes
-// Auth:      User-assigned managed identity (no secrets)
+// Auth:      User-assigned managed identity for Azure.
+//            DATABASE_URL is a Container App secret when databaseUrl is set.
 // Resources: 0.5 vCPU / 1 GiB RAM (matches your ~15 min runtime comfortably)
 // Timeout:   30 min (safety margin above the ~15 min runtime)
 // ---------------------------------------------------------------------------
@@ -161,6 +180,7 @@ resource job 'Microsoft.App/jobs@2024-03-01' = {
           identity: managedIdentity.id  // Pull image via managed identity - no password stored
         }
       ]
+      secrets: databaseSecret
     }
     template: {
       containers: [
@@ -183,7 +203,7 @@ resource job 'Microsoft.App/jobs@2024-03-01' = {
             cpu: json('0.5')
             memory: '1Gi'
           }
-          env: [
+          env: concat([
             {
               // Required so DefaultAzureCredential picks the right managed identity
               // when multiple identities could be present on the host.
@@ -204,7 +224,7 @@ resource job 'Microsoft.App/jobs@2024-03-01' = {
               name: 'SYNC_TIMEZONE'
               value: 'America/Chicago'
             }
-          ]
+          ], databaseEnv)
         }
       ]
     }
@@ -246,6 +266,7 @@ resource jobSalesForecast 'Microsoft.App/jobs@2024-03-01' = {
           identity: managedIdentity.id
         }
       ]
+      secrets: databaseSecret
     }
     template: {
       containers: [
@@ -260,7 +281,7 @@ resource jobSalesForecast 'Microsoft.App/jobs@2024-03-01' = {
             cpu: json('0.5')
             memory: '1Gi'
           }
-          env: [
+          env: concat([
             {
               name: 'AZURE_CLIENT_ID'
               value: managedIdentity.properties.clientId
@@ -273,7 +294,7 @@ resource jobSalesForecast 'Microsoft.App/jobs@2024-03-01' = {
               name: 'LOG_LEVEL'
               value: 'INFO'
             }
-          ]
+          ], databaseEnv)
         }
       ]
     }

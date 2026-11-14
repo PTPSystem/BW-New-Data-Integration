@@ -32,6 +32,9 @@ tzdata>=2024.1
 # Config-driven pipelines
 PyYAML>=6.0.1
 
+# Neon Postgres sink (binary wheel bundles libpq)
+psycopg[binary]>=3.2.0
+
 # OLAP/XMLA
 # olapy>=0.9.0
 

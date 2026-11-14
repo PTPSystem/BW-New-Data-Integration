@@ -10,9 +10,11 @@ This guide covers deploying the containerized Beachwood Data Integration system 
 - Network access from TrueNAS to:
   - Azure Key Vault (vault.azure.net)
   - Microsoft Graph API (graph.microsoft.com)
-  - Dataverse (crm.dynamics.com)
+  - Neon Postgres (`*.neon.tech:5432`, SSL required) via `DATABASE_URL`
+  - Dataverse (crm.dynamics.com) for the historical backfill and remaining reads
   - OLAP Server (ednacubes.papajohns.com:10502)
   - SharePoint Online (sharepoint.com)
+- `DATABASE_URL` set in the container environment. Placeholder: `postgresql://<role>:<password>@<endpoint>.<region>.aws.neon.tech/<database>?sslmode=require`
 
 ## Build and Push Container Image
 
@@ -248,8 +250,8 @@ kubectl create job --from=cronjob/beachwood-integration manual-test -n productio
    # Test OLAP connection
    docker exec beachwood-integration python -c "from modules.olap_to_dataverse import execute_xmla_mdx; print('OLAP OK')"
    
-   # Test Dataverse connection
-   docker exec beachwood-integration python -c "from modules.olap_to_dataverse import get_dataverse_access_token; print('Dataverse OK')"
+   # Print Neon DDL (does not connect)
+   docker exec beachwood-integration python -m modules.neon_sink --print-ddl
    ```
 
 ## Updating
