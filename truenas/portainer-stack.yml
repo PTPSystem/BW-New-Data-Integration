@@ -45,8 +45,7 @@ Create a network that allows host access.
    - `AZURE_TENANT_ID`: c8b6ba98-3fc0-4153-83a9-01374492c0f5
    - `AZURE_CLIENT_ID`: d056223e-f0de-4b16-b4e0-fec2a24109ff
    - `AZURE_CLIENT_SECRET`: [Get from Azure Key Vault kv-bw-data-integration]
-   - `POSTGRES_HOST`: 172.17.0.1 (or your TrueNAS IP)
-   - `POSTGRES_PORT`: 5432
+   - `DATABASE_URL`: Neon connection string (`postgresql://<role>:<password>@<endpoint>.<region>.aws.neon.tech/<database>?sslmode=require`). Do not paste a real password into the stack file in git.
 6. **Deploy the stack**
 
 ## Docker Compose Configuration
@@ -67,9 +66,8 @@ services:
       - AZURE_TENANT_ID=${AZURE_TENANT_ID}
       - AZURE_CLIENT_ID=${AZURE_CLIENT_ID}
       - AZURE_CLIENT_SECRET=${AZURE_CLIENT_SECRET}
-      # PostgreSQL connection (if needed)
-      - POSTGRES_HOST=${POSTGRES_HOST:-172.17.0.1}
-      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      # Neon Postgres write target
+      - DATABASE_URL=${DATABASE_URL}
 
     volumes:
       - /mnt/truenas/beachwood/logs:/app/logs

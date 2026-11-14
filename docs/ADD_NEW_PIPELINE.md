@@ -9,6 +9,8 @@ The system uses a generic XMLA parser with config-driven hierarchy mapping. Addi
 2. Creating a mapping file in `pipelines/mappings/`
 3. No Python code changes needed!
 
+The pipeline upserts into Neon Postgres (`DATABASE_URL`). The mapping key `dataverse:` is the Postgres column name, and `table:` is the Postgres table name. The loader creates the table on first write from those types (`string` → `text`, `date` → `date`, `datetime` → `timestamptz`, `int` → `bigint`, `decimal` → `numeric`). The business-key column is the primary key.
+
 ---
 
 ## Step 1: Analyze Your MDX Query
@@ -409,7 +411,7 @@ python olap_to_dataverse.py --query store_daily_metrics --length 1wk
 
 ### Issue: Some measures are missing
 
-**Symptom**: Not all measures appear in the Dataverse records
+**Symptom**: Not all measures appear in the Neon rows
 
 **Solution**: 
 1. Check that measure names in `measures:` section match EXACTLY what's in the MDX

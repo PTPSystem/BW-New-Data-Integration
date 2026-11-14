@@ -7,11 +7,11 @@ from typing import Optional
 from dotenv import load_dotenv
 
 # Import local modules
-from modules.utils.keyvault import get_secret, get_dataverse_credentials, get_atscale_api_token
+from modules.utils.keyvault import get_secret, get_atscale_api_token
 from modules.utils.config import load_config
-from modules.dataverse import get_dataverse_access_token, upsert_to_dataverse
-from modules.notifications import send_email_notification
+from modules.neon_sink import spec_from_mapping, upsert_records
 from modules.pipeline_config import load_pipelines, load_mapping
+from modules.notifications import send_email_notification
 from modules.pipeline_runner import run_mdx_to_df, run_sql_to_df, transform_df_to_records
 from modules.length_slicer import (
     LengthError,
@@ -29,7 +29,7 @@ load_dotenv()
 
 def query_olap_and_sync_to_dataverse(config=None, logger=None, query_type='full_bi_data'):
 
-    """Main function to query OLAP and sync to Dataverse."""
+    """Query OLAP and upsert the transformed rows into Neon Postgres."""
     def log(msg):
         if logger:
             logger.info(msg)
@@ -37,7 +37,7 @@ def query_olap_and_sync_to_dataverse(config=None, logger=None, query_type='full_
             print(msg)
     
     log("="*80)
-    log("OLAP to Dataverse Sync")
+    log("OLAP to Neon Postgres Sync")
     log("="*80)
     
     # Get OLAP configuration from Key Vault
@@ -47,30 +47,14 @@ def query_olap_and_sync_to_dataverse(config=None, logger=None, query_type='full_
     olap_password = get_secret('olap-password')
     olap_ssl_verify = False  # Self-signed cert
     
-    # Get Dataverse configuration from Key Vault
-    dv_creds = get_dataverse_credentials()
-    dataverse_url = dv_creds['environment_url']
-    client_id = dv_creds['client_id']
-    tenant_id = dv_creds['tenant_id']
-    client_secret = dv_creds['client_secret']
-    
-    table_name = "crf63_oarsbidatas"  # Plural form for API (singular: crf63_oarsbidata)
+    table_name = "crf63_oarsbidatas"
     
     log(f"\nOLAP Server: {olap_server}")
     log(f"OLAP Catalog: {olap_catalog}")
-    log(f"Dataverse URL: {dataverse_url}")
-    log(f"Table: {table_name}")
+    log(f"Neon table: {table_name}")
     
-    # Step 1: Get Dataverse access token
-    log("\n1. Getting Dataverse access token...")
-    dataverse_token = get_dataverse_access_token(dataverse_url, client_id, client_secret, tenant_id, logger)
-    
-    if not dataverse_token:
-        log("✗ Failed to get Dataverse access token")
-        return {"success": False, "error": "Failed to get Dataverse token"}
-    
-    # Step 2: Query OLAP cube
-    log("\n2. Querying OLAP cube...")
+    # Step 1: Query OLAP cube
+    log("\n1. Querying OLAP cube...")
     
     # Get the appropriate MDX query based on query_type
     # For incremental daily_sales ranges, allow service measures to be toggled.
@@ -160,8 +144,8 @@ def query_olap_and_sync_to_dataverse(config=None, logger=None, query_type='full_
     log(f"\n   Sample data:")
     log(df.head().to_string())
     
-    # Step 3: Transform data for Dataverse
-    log("\n3. Transforming data for Dataverse...")
+    # Step 2: Transform data (unchanged record shape)
+    log("\n2. Transforming data...")
     
     # Use the dedicated transform function with business key support
     records = transform_olap_to_dataverse_records(df, logger)
@@ -172,15 +156,10 @@ def query_olap_and_sync_to_dataverse(config=None, logger=None, query_type='full_
     if records:
         log(f"   First record business key: {records[0].get('crf63_businesskey', 'MISSING')}")
     
-    # Step 4: Upsert to Dataverse
-    log("\n4. Upserting to Dataverse...")
-    created, updated, errors = upsert_to_dataverse(
-        dataverse_url,
-        dataverse_token,
-        table_name,
-        records,
-        logger
-    )
+    # Step 3: Upsert to Neon. daily_sales mapping is the schema for this legacy load.
+    log("\n3. Upserting to Neon Postgres...")
+    mapping = load_mapping(load_pipelines()["daily_sales"].mapping_path)
+    created, updated, errors = upsert_records(records, spec_from_mapping(mapping), logger=logger)
     
     log("\n" + "="*80)
     log("✅ Sync Complete!")
@@ -213,7 +192,7 @@ def main():
         except LengthError as exc:
             raise argparse.ArgumentTypeError(str(exc)) from exc
 
-    parser = argparse.ArgumentParser(description='Sync OLAP data to Dataverse')
+    parser = argparse.ArgumentParser(description='Sync OLAP data to Neon Postgres')
     parser.add_argument(
         '--query',
         choices=available_pipelines + ['all'],
@@ -280,15 +259,9 @@ def main():
         ).lower()
         use_atscale = backend == "atscale" and bool(p.sql)
 
-        dv_creds = get_dataverse_credentials()
-        dataverse_url = dv_creds['environment_url']
-        client_id = dv_creds['client_id']
-        tenant_id = dv_creds['tenant_id']
-        client_secret = dv_creds['client_secret']
-
         print(f"Running pipeline: {p.name}")
         print(f"Backend: {backend}")
-        print(f"Dataverse Table: {mapping.get('table')}")
+        print(f"Neon table: {mapping.get('table')}")
 
         if use_atscale:
             try:
@@ -317,9 +290,6 @@ def main():
                 print(sql)
                 print("--- End SQL ---\n")
 
-            dataverse_token = get_dataverse_access_token(
-                dataverse_url, client_id, client_secret, tenant_id
-            )
             token = get_atscale_api_token()
             df = run_sql_to_df(
                 sql=sql,
@@ -364,9 +334,6 @@ def main():
                 print(mdx)
                 print("--- End MDX ---\n")
 
-            dataverse_token = get_dataverse_access_token(
-                dataverse_url, client_id, client_secret, tenant_id
-            )
             df = run_mdx_to_df(
                 xmla_server=olap_server,
                 catalog=olap_catalog,
@@ -388,8 +355,7 @@ def main():
             }
 
         records = transform_df_to_records(df, mapping)
-        alternate_key = mapping.get('alternate_key', 'crf63_businesskey')
-        created, updated, errors = upsert_to_dataverse(dataverse_url, dataverse_token, mapping['table'], records, alternate_key)
+        created, updated, errors = upsert_records(records, spec_from_mapping(mapping))
         return {"success": True, "records_created": created, "records_updated": updated, "errors": errors}
 
     # If pipeline is explicitly provided, run it (advanced escape hatch).
@@ -410,7 +376,7 @@ def main():
         mode_description = args.length
     
     print("="*80)
-    print("OLAP to Dataverse Sync (using Azure Key Vault)")
+    print("OLAP to Neon Postgres Sync (using Azure Key Vault)")
     print(f"Query: {args.query}")
     print(f"Mode: {mode_description}")
     print(f"Email: {args.email}")
@@ -420,7 +386,7 @@ def main():
     try:
         # Get credentials from Azure Key Vault
         print("📦 Loading credentials from Azure Key Vault (kv-bw-data-integration)...")
-        print("   Using app-client-id and app-client-secret for Dataverse access")
+        print("   Using Key Vault for OLAP credentials; Neon uses DATABASE_URL")
         print("✓ Key Vault configured (credentials loaded on-demand)")
         print()
         
@@ -457,9 +423,9 @@ def main():
             print("\n📧 Sending email notification...")
             
             if result["success"]:
-                subject = "✅ OLAP to Dataverse Sync Completed Successfully"
+                subject = "✅ OLAP to Neon Sync Completed Successfully"
                 body = f"""
-OLAP to Dataverse sync completed successfully.
+OLAP to Neon Postgres sync completed successfully.
 
 Summary:
             - Query: {args.query}
@@ -469,12 +435,12 @@ Summary:
 - Errors: {result.get('errors', 0)}
 - Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 
-The data has been synchronized to Dataverse.
+The data has been synchronized to Neon Postgres.
                 """.strip()
             else:
-                subject = "❌ OLAP to Dataverse Sync Failed"
+                subject = "❌ OLAP to Neon Sync Failed"
                 body = f"""
-OLAP to Dataverse sync failed.
+OLAP to Neon Postgres sync failed.
 
 Error: {result.get('error', 'Unknown error')}
 Query: {args.query}
@@ -503,9 +469,9 @@ Please check the logs for more details.
         # Try to send error notification
         if send_email:
             try:
-                subject = "❌ OLAP to Dataverse Sync Error"
+                subject = "❌ OLAP to Neon Sync Error"
                 body = f"""
-OLAP to Dataverse sync encountered an unexpected error.
+OLAP to Neon Postgres sync encountered an unexpected error.
 
 Error: {str(e)}
             Query: {args.query}

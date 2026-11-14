@@ -22,6 +22,9 @@ services:
       # Logging
       - LOG_LEVEL=DEBUG
       - PYTHONUNBUFFERED=1
+
+      # Neon Postgres write target. Set in the host environment or a gitignored .env.
+      - DATABASE_URL=${DATABASE_URL:-}
     
     volumes:
       # Mount code for development (comment out for production)

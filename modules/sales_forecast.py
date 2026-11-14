@@ -10,12 +10,11 @@ Architecture:
      (replaces BI Sales Channel - Daily.csv)
   4. Run ARIMA/SARIMA per-store weekly forecast
   5. Distribute each weekly forecast → daily × daypart using the distribution grid
-  6. Upsert results to crf63_bwsalesforecasts (respecting crf63_overwrite flags)
+  6. Upsert results to Neon table crf63_bwsalesforecasts (respecting crf63_overwrite flags)
 """
 
 import os
 import json
-import uuid
 import requests
 import pandas as pd
 from datetime import datetime, timedelta
@@ -344,69 +343,46 @@ def _forecast_store(store_data, store_id, tuned_params, n_forecast, logger=None)
 # Step 6: Overwrite protection
 # ---------------------------------------------------------------------------
 
-def _get_overwrite_keys(environment_url, access_token, week_labels, logger=None):
-    """Return set of (store, week, daypart, dow) tuples that have overwrite=true."""
-    if not week_labels:
-        return set()
+def _get_overwrite_keys(week_labels, logger=None):
+    """Return (store, week, daypart, dow) keys flagged crf63_overwrite in Neon."""
+    from modules.neon_sink import fetch_overwrite_keys
 
-    week_filters = " or ".join(
-        [f"crf63_forecastedfiscalweek eq '{w}'" for w in week_labels]
-    )
-    url = (
-        f"{environment_url}/api/data/v9.2/crf63_bwsalesforecasts"
-        f"?$filter=crf63_overwrite eq true and ({week_filters})"
-        f"&$select=crf63_forecastedstore,crf63_forecastedfiscalweek,"
-        f"crf63_forecasteddaypart,crf63_forecasteddow"
-    )
-    records = _query_paged(environment_url, access_token, url, logger)
-
-    keys = set()
-    for r in records:
-        keys.add((
-            str(r["crf63_forecastedstore"]),
-            r["crf63_forecastedfiscalweek"],
-            r["crf63_forecasteddaypart"],
-            int(r["crf63_forecasteddow"]),
-        ))
-
-    return keys
+    return fetch_overwrite_keys(week_labels, logger=logger)
 
 
 # ---------------------------------------------------------------------------
 # Step 7: Batch upsert to crf63_bwsalesforecasts
 # ---------------------------------------------------------------------------
 
-def _upsert_records(environment_url, access_token, records, overwrite_keys, logger=None):
+def _upsert_records(records, overwrite_keys, logger=None):
     """
-    Batch PATCH upsert using the composite alternate key:
-      (crf63_forecasteddaypart, crf63_forecasteddow,
-       crf63_forecastedfiscalweek, crf63_forecastedstore)
+    Upsert into Neon on the composite key
+    (crf63_forecasteddaypart, crf63_forecasteddow,
+     crf63_forecastedfiscalweek, crf63_forecastedstore).
 
     Records that exist in overwrite_keys are skipped.
-    Returns True if all batches succeeded.
+    Returns True if every row was written.
     """
+    from modules.neon_sink import SALES_FORECAST, upsert_records
+
     def log(msg):
         if logger:
             logger.info(msg)
         else:
             print(msg)
 
-    table = "crf63_bwsalesforecasts"
-    api_base = f"{environment_url}/api/data/v9.2"
-
-    # Filter out overwrite-protected records
     filtered, skipped = [], 0
-    for r in records:
+    for record in records:
         key = (
-            str(r["crf63_forecastedstore"]),
-            r["crf63_forecastedfiscalweek"],
-            r["crf63_forecasteddaypart"],
-            int(r["crf63_forecasteddow"]),
+            str(record["crf63_forecastedstore"]),
+            record["crf63_forecastedfiscalweek"],
+            record["crf63_forecasteddaypart"],
+            int(record["crf63_forecasteddow"]),
         )
         if key in overwrite_keys:
             skipped += 1
         else:
-            filtered.append(r)
+            filtered.append(record)
 
     if skipped:
         log(f"  Skipped {skipped} overwrite-protected records")
@@ -415,74 +391,8 @@ def _upsert_records(environment_url, access_token, records, overwrite_keys, logg
         log("  No records to upsert")
         return True
 
-    batch_size = 50
-    total = len(filtered)
-    success_batches = 0
-    total_batches = (total + batch_size - 1) // batch_size
-
-    for batch_num, start in enumerate(range(0, total, batch_size), 1):
-        batch = filtered[start : start + batch_size]
-        batch_id = uuid.uuid4().hex
-        changeset_id = uuid.uuid4().hex
-
-        lines = []
-        lines.append(f"--batch_{batch_id}")
-        lines.append(f"Content-Type: multipart/mixed;boundary=changeset_{changeset_id}")
-        lines.append("")
-
-        for i, record in enumerate(batch):
-            store = record["crf63_forecastedstore"]
-            week = record["crf63_forecastedfiscalweek"]
-            daypart = record["crf63_forecasteddaypart"]
-            dow = int(record["crf63_forecasteddow"])
-
-            lines.append(f"--changeset_{changeset_id}")
-            lines.append("Content-Type: application/http")
-            lines.append("Content-Transfer-Encoding: binary")
-            lines.append(f"Content-ID: {i + 1}")
-            lines.append("")
-            lines.append(
-                f"PATCH /api/data/v9.2/{table}"
-                f"(crf63_forecasteddaypart='{daypart}',"
-                f"crf63_forecasteddow={dow},"
-                f"crf63_forecastedfiscalweek='{week}',"
-                f"crf63_forecastedstore='{store}') HTTP/1.1"
-            )
-            lines.append("Content-Type: application/json;type=entry")
-            lines.append("")
-            lines.append(json.dumps(record))
-            lines.append("")
-
-        lines.append(f"--changeset_{changeset_id}--")
-        lines.append("")
-        lines.append(f"--batch_{batch_id}--")
-
-        body = "\r\n".join(lines).encode("utf-8")
-        headers = {
-            "Authorization": f"Bearer {access_token}",
-            "Content-Type": f"multipart/mixed;boundary=batch_{batch_id}",
-            "Accept": "multipart/mixed",
-            "OData-MaxVersion": "4.0",
-            "OData-Version": "4.0",
-        }
-
-        response = requests.post(f"{api_base}/$batch", headers=headers, data=body, timeout=120)
-
-        if response.status_code == 200:
-            text = response.text
-            ok = (
-                text.count("HTTP/1.1 200 OK")
-                + text.count("HTTP/1.1 201 Created")
-                + text.count("HTTP/1.1 204 No Content")
-            )
-            if ok == len(batch):
-                success_batches += 1
-            else:
-                log(f"  WARNING: {len(batch) - ok} records failed in batch {batch_num}")
-        else:
-            log(f"  Batch {batch_num}/{total_batches} HTTP error: {response.status_code}")
-
-    return success_batches == total_batches
+    _created, _updated, errors = upsert_records(filtered, SALES_FORECAST, batch_size=500, logger=logger)
+    return errors == 0
 
 
 # ---------------------------------------------------------------------------
@@ -497,7 +407,7 @@ def main(logger=None, dry_run=False):
       3. Build daypart distribution grid from Dataverse
       4. Run ARIMA forecasts per store
       5. Break down weekly forecasts using distribution grid
-      6. Upsert to crf63_bwsalesforecasts
+      6. Upsert to Neon table crf63_bwsalesforecasts
 
     Returns dict with success, forecast_count, weeks, stores keys.
     """
@@ -603,7 +513,7 @@ def main(logger=None, dry_run=False):
         log("No forecast records to write")
         return {"success": True, "forecast_count": 0, "weeks": week_labels, "stores": 0}
 
-    # --- 7. Upsert to Dataverse ----------------------------------------------
+    # --- 7. Upsert to Neon ----------------------------------------------------
     if dry_run:
         log(f"\n[7/7] Dry run — skipping upsert of {len(all_records)} records")
         return {
@@ -614,10 +524,10 @@ def main(logger=None, dry_run=False):
             "dry_run": True,
         }
 
-    log("\n[7/7] Upserting forecast records to crf63_bwsalesforecasts...")
+    log("\n[7/7] Upserting forecast records to Neon crf63_bwsalesforecasts...")
 
-    overwrite_keys = _get_overwrite_keys(environment_url, access_token, week_labels, logger)
-    success = _upsert_records(environment_url, access_token, all_records, overwrite_keys, logger)
+    overwrite_keys = _get_overwrite_keys(week_labels, logger)
+    success = _upsert_records(all_records, overwrite_keys, logger)
 
     result = {
         "success": success,

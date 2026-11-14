@@ -4,7 +4,7 @@ This directory contains the implementation of Step 2 of the OLAP to Dataverse mi
 
 ## Overview
 
-The NewIntegration module provides a clean, tested implementation of syncing data from the OARS Franchise OLAP cube to Microsoft Dataverse, replacing the legacy Excel COM automation approach.
+The NewIntegration module syncs data from the OARS Franchise OLAP cube into Neon Postgres. Record shaping is unchanged from the Dataverse load: table names and column names are the Dataverse logical names (`crf63_*`). Only the write target moved.
 
 ## Features
 
@@ -12,7 +12,7 @@ The NewIntegration module provides a clean, tested implementation of syncing dat
 - ✅ Azure Key Vault integration for secure credential management
 - ✅ Comprehensive testing framework
 - ✅ Support for all 33 OLAP measures
-- ✅ Automatic data transformation and Dataverse upsert
+- ✅ Automatic data transformation and Neon Postgres upsert (`DATABASE_URL`)
 - ✅ Cross-platform compatible (Windows, Linux, macOS)
 
 ## Directory Structure
@@ -51,6 +51,12 @@ NewIntegration/
 4. **OLAP Credentials**:
    - Set `OLAP_USERNAME` and `OLAP_PASSWORD` environment variables
    - Or store `olap-password` in Key Vault
+
+5. **Neon Postgres** (write target):
+   - A dedicated Neon project is created separately. This repo does not contain its id or password.
+   - Set `DATABASE_URL` to a direct connection string. `sslmode=require` is applied when the URL does not already require SSL.
+   - Placeholder: `postgresql://<role>:<password>@<endpoint>.<region>.aws.neon.tech/<database>?sslmode=require`
+   - The loader creates the destination tables on first write. The same DDL is checked in at `sql/neon_schema.sql` (`python -m modules.neon_sink --print-ddl`). Apply that file with a direct connection, or let the loader create the tables.
 
 ## Quick Start
 
@@ -100,7 +106,7 @@ This will:
 1. Connect to OLAP cube
 2. Execute MDX query with all 33 measures
 3. Parse and transform the data
-4. Upsert records to Dataverse table `crf63_olapbidatas`
+4. Upsert records to Neon table `crf63_oarsbidatas` (and the other pipeline tables when `--query all`)
 
 ## The 33 Measures
 
@@ -151,23 +157,36 @@ The sync captures these measures from the OARS Franchise cube:
 ### Financial (1)
 33. m_ty_agg_commission_local_sum
 
+## Historical backfill (Dataverse → Neon)
+
+One-time copy of every table the ETL writes. It reuses Key Vault Dataverse auth, pages with `@odata.nextLink`, and upserts into Neon on the same primary keys. Re-running is safe. It does not extract from OLAP.
+
+```bash
+# Count Dataverse rows. Does not open DATABASE_URL.
+python scripts/backfill_dataverse_to_neon.py --dry-run
+
+# Upsert history into Neon. Requires DATABASE_URL.
+python scripts/backfill_dataverse_to_neon.py
+
+# Empty each Neon table, then reload.
+python scripts/backfill_dataverse_to_neon.py --truncate --batch-size 1000
+```
+
+Tables: `crf63_oarsbidatas`, `crf63_saleschanneldailies`, `crf63_offerses`, `crf63_inventories`, `crf63_bw_clockinouts`, `crf63_labortimes`, `crf63_bwsalesforecasts`.
+
+The script logs fetched / created / updated / error counts per table. `--dry-run` still reads Dataverse. Do not run it until the Neon project exists and `DATABASE_URL` is set for a real load.
+
 ## Manual Verification Steps
 
-After running the full sync, verify in Dataverse:
+After running the full sync, query Neon (do not commit the connection string):
 
-1. **Open Dataverse Portal**:
-   - Navigate to https://orgbf93e3c3.crm.dynamics.com
-   - Go to Tables → `crf63_olapbidatas`
-
-2. **Verify Data Present**:
-   - Check that records exist
-   - Verify date range (should be FY2025)
-   - Check store coverage
-
-3. **Verify All 33 Measures**:
-   - Open a few sample records
-   - Confirm all measure columns have values
-   - Check for any null/empty columns
+```sql
+SELECT COUNT(*) FROM crf63_oarsbidatas;
+SELECT crf63_businesskey, crf63_storenumber, crf63_calendardate, crf63_tynetsales
+FROM crf63_oarsbidatas
+ORDER BY crf63_calendardate DESC
+LIMIT 20;
+```
 
 ## Troubleshooting
 
@@ -195,13 +214,15 @@ Error: 401 Unauthorized
 - Check `OLAP_USERNAME` environment variable
 - Check `OLAP_PASSWORD` environment variable or Key Vault secret
 
-### Dataverse Authentication Failed
+### Neon connection failed
 
 ```
-Error: AADSTS70011: The provided value for the input parameter 'scope' is not valid
+RuntimeError: DATABASE_URL is not set
 ```
 
-**Solution**: Verify client ID and tenant ID in Key Vault are correct.
+**Solution**: Export `DATABASE_URL` with `sslmode=require`. Use the direct host for the batch load. The password stays out of git.
+
+The historical backfill and the sales-forecast source reads still authenticate to Dataverse through Key Vault. A Dataverse token error on those paths means `app-client-id`, `app-client-secret`, or `azure-tenant-id` is missing or wrong.
 
 ### No Data Returned from Query
 
@@ -229,13 +250,13 @@ Query returned 0 rows
 │ olap_to_dataverse│◄────►│  Azure Key Vault      │
 │      .py         │      │ kv-bw-data-integration│
 └────────┬─────────┘      └───────────────────────┘
-         │ Web API
-         │ (HTTPS)
+         │ Postgres (DATABASE_URL, sslmode=require)
          ▼
 ┌──────────────────┐
-│   Dataverse      │
-│ crf63_olapbidatas│
-│     Table        │
+│  Neon Postgres   │
+│ crf63_oarsbidatas│
+│  and sibling     │
+│  ETL tables      │
 └──────────────────┘
 ```
 

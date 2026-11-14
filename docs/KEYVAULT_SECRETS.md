@@ -23,7 +23,7 @@
 
 | Secret Name | Purpose | Used By |
 |-------------|---------|---------|
-| `dataverse-client-id` | Dataverse environment identifier | `olap_to_dataverse.py`, `labor_forecast.py` |
+| `dataverse-client-id` | Dataverse environment identifier | Historical backfill and remaining Dataverse reads. The OLAP/labor/forecast **writes** use `DATABASE_URL`, not this secret. |
 
 **Note**: Dataverse uses the same `app-client-id` and `app-client-secret` as SharePoint since they share the same app registration.
 

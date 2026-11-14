@@ -19,9 +19,8 @@ services:
       - AZURE_CLIENT_SECRET=${AZURE_CLIENT_SECRET}
       - KEYVAULT_NAME=kv-bw-data-integration
 
-      # PostgreSQL access (if needed)
-      - POSTGRES_HOST=${POSTGRES_HOST:-172.17.0.1}
-      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      # Neon Postgres write target (direct URL, sslmode=require). Do not commit the secret.
+      - DATABASE_URL=${DATABASE_URL:-}
 
     # Mount TrueNAS storage volumes
     volumes:

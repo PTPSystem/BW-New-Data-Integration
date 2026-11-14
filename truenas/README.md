@@ -176,7 +176,8 @@ Use the cron jobs from `cron-jobs.txt` in TrueNAS cron configuration.
 - Storage pool with sufficient space for logs and temp files
 - Network access to:
   - Azure Key Vault (`vault.azure.net`)
-  - Dataverse (`crm.dynamics.com`)
+  - Neon Postgres (`*.neon.tech`, outbound 5432, `sslmode=require`) via `DATABASE_URL`
+  - Dataverse (`crm.dynamics.com`) for the historical backfill and remaining reads
   - OLAP Server (`ednacubes.papajohns.com:10502`)
 
 ### Azure Configuration

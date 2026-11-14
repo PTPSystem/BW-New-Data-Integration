@@ -7,7 +7,7 @@ Flow:
   2. Download the latest (or configured) pay_summ/summary ZIP per store
   3. Extract timecard + employee-detail CSVs
   4. Split punch hours into day parts (Morning / Lunch / ...)
-  5. Upsert aggregated hours to Dataverse crf63_labortimes
+  5. Upsert aggregated hours to Neon table crf63_labortimes
 """
 
 from __future__ import annotations
@@ -25,7 +25,8 @@ import requests
 from bs4 import BeautifulSoup
 from dateutil import parser as dt_parser
 
-from modules.dataverse import get_dataverse_access_token, upsert_to_dataverse
+from modules.dataverse import get_dataverse_access_token
+from modules.neon_sink import LABOR_TIMES, upsert_records, with_table_name
 from modules.utils.config import load_config
 from modules.utils.keyvault import get_dataverse_credentials, get_labor_files_credentials
 
@@ -516,31 +517,18 @@ def cleanup_temp_dirs(config: Dict[str, Any], logger=None) -> None:
 
 
 def upsert_labor_to_dataverse(records: Sequence[Dict[str, Any]], config: Dict[str, Any], logger=None) -> Dict[str, int]:
+    """Write day-part labor rows to Neon. The name is kept for existing callers.
+
+    ``records_to_dataverse`` still builds the payload; only the destination changed.
+    """
     table_name = (
         config.get("labor_processing", {}).get("dataverse_table")
         or config.get("dataverse", {}).get("table_names", {}).get("labor_times")
-        or "crf63_labortimes"
+        or LABOR_TIMES.name
     )
-    dv_creds = get_dataverse_credentials()
-    token = get_dataverse_access_token(
-        dv_creds["environment_url"],
-        dv_creds["client_id"],
-        dv_creds["client_secret"],
-        dv_creds["tenant_id"],
-        logger,
-    )
-    if not token:
-        raise RuntimeError("Failed to get Dataverse access token")
-
     payload = records_to_dataverse(records)
-    created, updated, errors = upsert_to_dataverse(
-        dv_creds["environment_url"],
-        token,
-        table_name,
-        payload,
-        "crf63_businesskey",
-        logger,
-    )
+    spec = with_table_name(LABOR_TIMES, table_name)
+    created, updated, errors = upsert_records(payload, spec, logger=logger)
     return {"created": created, "updated": updated, "errors": errors}
 
 
@@ -553,7 +541,7 @@ def run_labor_processing(
     keep_temp: bool = False,
     csv_path: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Run the full labor download → process → Dataverse flow."""
+    """Run the full labor download → process → Neon flow."""
     config = config or load_config()
     inject_labor_credentials(config, logger)
     labor = config["labor_processing"]
@@ -598,12 +586,12 @@ def run_labor_processing(
 
     upsert_result = {"created": 0, "updated": 0, "errors": 0}
     if skip_dataverse:
-        _log(logger, "Skipping Dataverse upsert")
+        _log(logger, "Skipping Neon upsert")
     else:
         upsert_result = upsert_labor_to_dataverse(records, config, logger)
         _log(
             logger,
-            f"Dataverse upsert: {upsert_result['created']} created, "
+            f"Neon upsert: {upsert_result['created']} created, "
             f"{upsert_result['updated']} updated, {upsert_result['errors']} errors",
         )
 
