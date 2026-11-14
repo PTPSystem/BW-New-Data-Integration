@@ -29,26 +29,35 @@ PG_TYPES = {
     "text": "text",
     "date": "date",
     "datetime": "timestamptz",
-    "int": "bigint",
-    "integer": "bigint",
+    "int": "integer",
+    "integer": "integer",
     "decimal": "numeric",
     "number": "numeric",
     "boolean": "boolean",
     "bool": "boolean",
 }
 
-# Columns the record builder always may set, even when a mapping omits them.
-_IMPLIED_COLUMNS = (
-    ("crf63_name", "text"),
-    ("crf63_datasource", "text"),
-    ("crf63_lastrefreshed", "timestamptz"),
+# Dataverse Decimal precision is the scale. The table scripts that set a range
+# use ±100000000000, which numeric(14,2) can store. It is not the Money type.
+_DECIMAL = "numeric(14,2)"
+_DECIMAL_NOTE = (
+    "Dataverse Decimal precision 2, range ±100000000000. "
+    "Not the Money type. numeric(14,2) covers that range."
 )
+_INTEGER_NOTE = "Dataverse Whole Number, range -2147483648 to 2147483647."
+_TS_NOTE = (
+    "Dataverse DateAndTime. Stored as timestamptz because DateTimeBehavior "
+    "is not set on this column in the create script."
+)
+_UNCONFIRMED = "Dataverse attribute metadata for this column is not in the repo."
 
 
 @dataclass(frozen=True)
 class ColumnSpec:
     name: str
     pg_type: str
+    nullable: bool = True
+    comment: str = ""
 
 
 @dataclass(frozen=True)
@@ -64,6 +73,8 @@ class TableSpec:
     columns: Tuple[ColumnSpec, ...]
     primary_key: Tuple[str, ...]
     optional_columns: Tuple[str, ...] = ()
+    comment: str = ""
+    primary_key_name: str = ""
 
     def column(self, name: str) -> ColumnSpec:
         for col in self.columns:
@@ -109,6 +120,273 @@ def _pg_type(logical: str) -> str:
         raise ValueError(f"Unsupported mapping type '{logical}'") from exc
 
 
+def value_kind(pg_type: str) -> str:
+    """Map a DDL type such as varchar(20) or numeric(14,2) to a coerce family."""
+    base = pg_type.split("(", 1)[0].strip().lower()
+    kinds = {
+        "text": "text",
+        "varchar": "text",
+        "character varying": "text",
+        "numeric": "numeric",
+        "decimal": "numeric",
+        "integer": "int",
+        "int": "int",
+        "bigint": "int",
+        "smallint": "int",
+        "date": "date",
+        "timestamptz": "timestamptz",
+        "timestamp": "timestamptz",
+        "boolean": "boolean",
+    }
+    try:
+        return kinds[base]
+    except KeyError as exc:
+        raise ValueError(f"Unsupported Postgres type '{pg_type}'") from exc
+
+
+def _string(name: str, length: int, *, nullable: bool = True, extra: str = "") -> ColumnSpec:
+    note = f"Dataverse String({length})."
+    if extra:
+        note = f"{note} {extra}"
+    return ColumnSpec(name, f"varchar({length})", nullable, note)
+
+
+def _decimal(name: str, *, extra: str = "") -> ColumnSpec:
+    note = _DECIMAL_NOTE if not extra else f"{_DECIMAL_NOTE} {extra}"
+    return ColumnSpec(name, _DECIMAL, True, note)
+
+
+def _integer(name: str, *, extra: str = "") -> ColumnSpec:
+    note = _INTEGER_NOTE if not extra else f"{_INTEGER_NOTE} {extra}"
+    return ColumnSpec(name, "integer", True, note)
+
+
+def _date_only(name: str, *, required: bool, extra: str) -> ColumnSpec:
+    return ColumnSpec(name, "date", not required, extra)
+
+
+def _timestamp(name: str) -> ColumnSpec:
+    return ColumnSpec(name, "timestamptz", True, _TS_NOTE)
+
+
+def _column_catalog() -> Dict[Tuple[str, str], ColumnSpec]:
+    """Dataverse attribute metadata taken from dataverse_table_creation/."""
+    date_oars = _date_only(
+        "crf63_calendardate",
+        required=True,
+        extra="Dataverse DateOnly with TimeZoneIndependent behavior (create_oarsbidata_table.py). ApplicationRequired.",
+    )
+    date_required = _date_only(
+        "crf63_calendardate",
+        required=True,
+        extra="Dataverse DateOnly, ApplicationRequired. DateTimeBehavior is not set in the create script.",
+    )
+    date_optional = _date_only(
+        "crf63_calendardate",
+        required=False,
+        extra="Dataverse DateOnly. RequiredLevel None in the create script.",
+    )
+
+    columns: List[Tuple[str, ColumnSpec]] = []
+
+    def add(table: str, col: ColumnSpec) -> None:
+        columns.append((table, col))
+
+    oars = "crf63_oarsbidatas"
+    add(oars, _string(
+        "crf63_businesskey", 50, nullable=False,
+        extra="Alternate key crf63_businesskey_key. RequiredLevel in the add script is None; NOT NULL because it is the primary key.",
+    ))
+    add(oars, _string("crf63_storenumber", 20))
+    add(oars, date_oars)
+    for name in (
+        "crf63_tynetsales", "crf63_l2ycompsales", "crf63_l3ycompsales", "crf63_lycompsales",
+        "crf63_targetfoodcost", "crf63_actualfoodcost", "crf63_flmd", "crf63_actuallabor",
+        "crf63_mileagecost", "crf63_discounts", "crf63_totalhours", "crf63_maketime",
+        "crf63_racktime", "crf63_otdtime", "crf63_avgttdt", "crf63_targetprofit",
+        "crf63_actualflm", "crf63_flmdpc", "crf63_commission", "crf63_cashovershort",
+        "crf63_orderaccuracypct", "crf63_smgavgclosure", "crf63_smgvaluepct",
+        "crf63_todoortimedispatch", "crf63_todoortimeminutes",
+    ):
+        add(oars, _decimal(name))
+    for name in (
+        "crf63_storedays", "crf63_tyorders", "crf63_lyorders", "crf63_deliveries",
+        "crf63_bozocoroorders", "crf63_otdordercount", "crf63_dispatchedorders",
+        "crf63_osatsurveycount", "crf63_osatsatisfied", "crf63_accuracysurveycount",
+        "crf63_totalcalls", "crf63_answeredcalls", "crf63_smgcasesopened",
+        "crf63_smgcasesresolved", "crf63_singles", "crf63_doubles", "crf63_triplesplus",
+        "crf63_runs", "crf63_ttdtorders", "crf63_tasteoffoodgood", "crf63_tasteoffoodtotal",
+        "crf63_orderaccuracygood",
+    ):
+        add(oars, _integer(name))
+    add(oars, _string("crf63_name", 100, extra="Primary name. RequiredLevel None in the create script."))
+    add(oars, _string("crf63_datasource", 50))
+    add(oars, _timestamp("crf63_lastrefreshed"))
+
+    channel = "crf63_saleschanneldailies"
+    add(channel, _string(
+        "crf63_businesskey", 250, nullable=False,
+        extra="Alternate key crf63_saleschanneldaily_businesskey_key. NOT NULL because it is the primary key.",
+    ))
+    add(channel, _string("crf63_storenumber", 20))
+    add(channel, date_required)
+    add(channel, _string("crf63_sourceactor", 100))
+    add(channel, _string("crf63_sourcechannel", 100))
+    add(channel, _string("crf63_daypart", 50))
+    add(channel, _decimal("crf63_tynetsalesusd"))
+    add(channel, _integer("crf63_tyorders"))
+    add(channel, _decimal("crf63_discountsusd"))
+    add(channel, _decimal("crf63_lynetsalesusd"))
+    add(channel, _integer("crf63_lyorders"))
+    add(channel, _string("crf63_name", 200, extra="Primary name. RequiredLevel None in the create script."))
+    add(channel, _timestamp("crf63_lastrefreshed"))
+
+    offers = "crf63_offerses"
+    offers_decimal = (
+        "Dataverse Decimal precision 2 in create_offers_table.py. "
+        "Min/max are omitted there; numeric(14,2) uses the same range as the other ETL decimals. Not Money."
+    )
+    offers_int = "Dataverse Integer in create_offers_table.py. Explicit min/max omitted; whole numbers are 32-bit."
+    add(offers, _string(
+        "crf63_businesskey", 200, nullable=False,
+        extra="Alternate key crf63_offers_key. ApplicationRequired.",
+    ))
+    add(offers, _string("crf63_storenumber", 50))
+    add(offers, date_optional)
+    add(offers, _string("crf63_offercode", 100))
+    add(offers, _string("crf63_offerposdescription", 200))
+    add(offers, _integer("crf63_redeemedcount", extra=offers_int))
+    for name in (
+        "crf63_discountamountusd", "crf63_grossmarginusd", "crf63_ordermixpercent",
+        "crf63_salesmixusdpercent", "crf63_netsalesusd", "crf63_targetfoodcostusd",
+    ):
+        add(offers, ColumnSpec(name, _DECIMAL, True, offers_decimal))
+    add(offers, _integer("crf63_ordercount", extra=offers_int))
+    add(offers, _string("crf63_name", 200, extra="Primary name. RequiredLevel None in the create script."))
+    add(offers, _timestamp("crf63_lastrefreshed"))
+
+    inventory = "crf63_inventories"
+    add(inventory, _string(
+        "crf63_businesskey", 600, nullable=False,
+        extra="Alternate key crf63_businesskey_key. RequiredLevel None; NOT NULL because it is the primary key.",
+    ))
+    add(inventory, _string("crf63_itemnumber", 100))
+    add(inventory, _string("crf63_storenumber", 100))
+    add(inventory, date_optional)
+    add(inventory, _string("crf63_itemdescription", 500))
+    add(inventory, _decimal("crf63_qtyonhand"))
+    add(inventory, _string("crf63_name", 200, extra="Primary name. RequiredLevel None in the create script."))
+    add(inventory, _timestamp("crf63_lastrefreshed"))
+
+    clock = "crf63_bw_clockinouts"
+    add(clock, _string(
+        "crf63_businesskey", 300, nullable=False,
+        extra=(
+            "Alternate key crf63_businesskey_key. The create script documents "
+            "{Store}_{YYYYMMDD}_{EmployeeName}; the live mapping also appends SystemUserID. "
+            "NOT NULL because it is the primary key."
+        ),
+    ))
+    add(clock, _string("crf63_storenumber", 20))
+    add(clock, date_required)
+    add(clock, _string("crf63_employeename", 200))
+    add(clock, _string("crf63_systemuserid", 50, extra="Added by add_clockinout_columns.py."))
+    add(clock, _timestamp("crf63_clockintime"))
+    add(clock, _timestamp("crf63_clockouttime"))
+    for name in (
+        "crf63_regularhours", "crf63_overtimehours", "crf63_totalhours",
+        "crf63_totalpay", "crf63_regularpay", "crf63_overtimepay",
+    ):
+        add(clock, _decimal(name))
+    add(clock, _string("crf63_name", 300, extra="Primary name. RequiredLevel None in the create script."))
+    add(clock, _string("crf63_datasource", 100))
+    add(clock, _timestamp("crf63_lastrefreshed"))
+
+    labor = "crf63_labortimes"
+    add(labor, _string(
+        "crf63_businesskey", 300, nullable=False,
+        extra="Alternate key crf63_businesskey_key. Format {Store}_{EmployeeID}_{YYYYMMDD}_{DayPart}. NOT NULL because it is the primary key.",
+    ))
+    add(labor, _string("crf63_storenumber", 20))
+    add(labor, _string("crf63_employeeid", 50))
+    add(labor, _string("crf63_employeename", 200))
+    add(labor, _string("crf63_daypart", 50))
+    add(labor, _decimal("crf63_totalhours"))
+    add(labor, _date_only(
+        "crf63_workdate",
+        required=True,
+        extra="Dataverse DateOnly, ApplicationRequired (create_labor_times_table.py).",
+    ))
+    add(labor, _string("crf63_name", 300, extra="Primary name. RequiredLevel None in the create script."))
+    add(labor, _timestamp("crf63_lastrefreshed"))
+    add(labor, _string("crf63_datasource", 100))
+
+    forecast = "crf63_bwsalesforecasts"
+    add(forecast, ColumnSpec(
+        "crf63_forecasteddaypart", "text", False,
+        f"{_UNCONFIRMED} Treated as an unbounded string. NOT NULL because it is part of the alternate key.",
+    ))
+    add(forecast, ColumnSpec(
+        "crf63_forecasteddow", "integer", False,
+        f"{_UNCONFIRMED} The writer sends int(dow). Assumed Dataverse Whole Number (32-bit), not a confirmed range.",
+    ))
+    add(forecast, ColumnSpec(
+        "crf63_forecastedfiscalweek", "text", False,
+        f"{_UNCONFIRMED} Week label such as the strings the forecast writer stores. Length not declared. NOT NULL as part of the alternate key.",
+    ))
+    add(forecast, ColumnSpec(
+        "crf63_forecastedstore", "text", False,
+        f"{_UNCONFIRMED} Store number stored as text by the writer. Length not declared. NOT NULL as part of the alternate key.",
+    ))
+    add(forecast, ColumnSpec(
+        "crf63_forecastedsales", "numeric(18,4)", True,
+        f"{_UNCONFIRMED} modules/sales_forecast.py rounds to 4 decimal places. Dataverse Precision was not found, so this is not confirmed as Decimal or Money.",
+    ))
+    add(forecast, ColumnSpec(
+        "crf63_dateofforecast", "date", True,
+        f"{_UNCONFIRMED} The writer sends date.isoformat(). DateOnly versus DateAndTime was not declared; stored as date.",
+    ))
+    add(forecast, ColumnSpec(
+        "crf63_overwrite", "boolean", True,
+        f"{_UNCONFIRMED} The old read filtered crf63_overwrite eq true, so this is a Two Options column. Nullable because some environments may omit it.",
+    ))
+    return {(table, col.name): col for table, col in columns}
+
+
+def _table_notes() -> Dict[str, Tuple[str, str]]:
+    """Table comment and Dataverse alternate-key schema name, when the repo names it."""
+    return {
+        "crf63_oarsbidatas": (
+            "Entity set for logical table crf63_oarsbidata.",
+            "crf63_businesskey_key",
+        ),
+        "crf63_saleschanneldailies": (
+            "Entity set for logical table crf63_saleschanneldaily.",
+            "crf63_saleschanneldaily_businesskey_key",
+        ),
+        "crf63_offerses": (
+            "Entity set for the Offers table.",
+            "crf63_offers_key",
+        ),
+        "crf63_inventories": (
+            "Entity set for logical table crf63_inventory.",
+            "crf63_businesskey_key",
+        ),
+        "crf63_bw_clockinouts": (
+            "Entity set for logical table crf63_bw_clockinout.",
+            "crf63_businesskey_key",
+        ),
+        "crf63_labortimes": (
+            "Entity set for logical table crf63_labortime.",
+            "crf63_businesskey_key",
+        ),
+        "crf63_bwsalesforecasts": (
+            "No create script in the repo. The composite key is the one the Dataverse PATCH used: daypart, dow, fiscal week, store. The alternate-key schema name is not in the repo.",
+            "",
+        ),
+    }
+
+
 def spec_from_mapping(mapping: Mapping[str, Any]) -> TableSpec:
     """Build a Postgres table spec from a pipeline mapping file.
 
@@ -123,7 +401,10 @@ def spec_from_mapping(mapping: Mapping[str, Any]) -> TableSpec:
     columns: List[ColumnSpec] = []
     seen = set()
 
-    def add(name: Any, pg_type: str) -> None:
+    catalog = _column_catalog()
+    notes, pk_constraint = _table_notes().get(table, ("", ""))
+
+    def add(name: Any, fallback_type: str) -> None:
         if name is None:
             return
         col_name = str(name).strip()
@@ -131,7 +412,16 @@ def spec_from_mapping(mapping: Mapping[str, Any]) -> TableSpec:
             return
         quote_ident(col_name)
         seen.add(col_name)
-        columns.append(ColumnSpec(col_name, pg_type))
+        known = catalog.get((table, col_name))
+        if known is not None:
+            columns.append(known)
+            return
+        columns.append(ColumnSpec(
+            col_name,
+            fallback_type,
+            True,
+            "Pipeline mapping type only. Dataverse length, precision, and required level were not found in the repo.",
+        ))
 
     add(pk_name, "text")
     for section in ("fields", "measures", "metadata"):
@@ -142,11 +432,18 @@ def spec_from_mapping(mapping: Mapping[str, Any]) -> TableSpec:
             if not isinstance(spec, dict) or not spec.get("dataverse"):
                 continue
             add(spec.get("dataverse"), _pg_type(str(spec.get("type") or "string")))
-    for name, pg_type in _IMPLIED_COLUMNS:
-        add(name, pg_type)
+    for name in ("crf63_name", "crf63_datasource", "crf63_lastrefreshed"):
+        if (table, name) in catalog:
+            add(name, "text")
 
     quote_ident(table)
-    return TableSpec(name=table, columns=tuple(columns), primary_key=(pk_name,))
+    return TableSpec(
+        name=table,
+        columns=tuple(columns),
+        primary_key=(pk_name,),
+        comment=notes,
+        primary_key_name=pk_constraint,
+    )
 
 
 def with_table_name(spec: TableSpec, name: str) -> TableSpec:
@@ -157,41 +454,61 @@ def with_table_name(spec: TableSpec, name: str) -> TableSpec:
         columns=spec.columns,
         primary_key=spec.primary_key,
         optional_columns=spec.optional_columns,
+        comment=spec.comment,
+        primary_key_name=spec.primary_key_name,
     )
 
 
-LABOR_TIMES = TableSpec(
-    name="crf63_labortimes",
-    columns=(
-        ColumnSpec("crf63_businesskey", "text"),
-        ColumnSpec("crf63_storenumber", "text"),
-        ColumnSpec("crf63_employeeid", "text"),
-        ColumnSpec("crf63_employeename", "text"),
-        ColumnSpec("crf63_daypart", "text"),
-        ColumnSpec("crf63_totalhours", "numeric"),
-        ColumnSpec("crf63_workdate", "date"),
-        ColumnSpec("crf63_name", "text"),
-        ColumnSpec("crf63_lastrefreshed", "timestamptz"),
-        ColumnSpec("crf63_datasource", "text"),
+def _spec_from_catalog(
+    name: str,
+    column_names: Sequence[str],
+    primary_key: Sequence[str],
+    optional_columns: Sequence[str] = (),
+) -> TableSpec:
+    catalog = _column_catalog()
+    notes, pk_constraint = _table_notes()[name]
+    return TableSpec(
+        name=name,
+        columns=tuple(catalog[(name, column)] for column in column_names),
+        primary_key=tuple(primary_key),
+        optional_columns=tuple(optional_columns),
+        comment=notes,
+        primary_key_name=pk_constraint,
+    )
+
+
+LABOR_TIMES = _spec_from_catalog(
+    "crf63_labortimes",
+    (
+        "crf63_businesskey",
+        "crf63_storenumber",
+        "crf63_employeeid",
+        "crf63_employeename",
+        "crf63_daypart",
+        "crf63_totalhours",
+        "crf63_workdate",
+        "crf63_name",
+        "crf63_lastrefreshed",
+        "crf63_datasource",
     ),
-    primary_key=("crf63_businesskey",),
+    ("crf63_businesskey",),
 )
 
 # Composite alternate key used by the sales-forecast PATCH:
 # (daypart, dow, fiscal week, store). crf63_overwrite is read to skip protected
 # rows and is copied by the historical backfill when Dataverse has the column.
-SALES_FORECAST = TableSpec(
-    name="crf63_bwsalesforecasts",
-    columns=(
-        ColumnSpec("crf63_forecasteddaypart", "text"),
-        ColumnSpec("crf63_forecasteddow", "bigint"),
-        ColumnSpec("crf63_forecastedfiscalweek", "text"),
-        ColumnSpec("crf63_forecastedstore", "text"),
-        ColumnSpec("crf63_forecastedsales", "numeric"),
-        ColumnSpec("crf63_dateofforecast", "date"),
-        ColumnSpec("crf63_overwrite", "boolean"),
+SALES_FORECAST = _spec_from_catalog(
+    "crf63_bwsalesforecasts",
+    (
+        "crf63_forecasteddaypart",
+        "crf63_forecasteddow",
+        "crf63_forecastedfiscalweek",
+        "crf63_forecastedstore",
+        "crf63_forecastedsales",
+        "crf63_dateofforecast",
+        "crf63_overwrite",
     ),
-    primary_key=(
+    (
         "crf63_forecasteddaypart",
         "crf63_forecasteddow",
         "crf63_forecastedfiscalweek",
@@ -220,10 +537,26 @@ def etl_write_targets() -> List[TableSpec]:
     return specs
 
 
+def _column_ddl(col: ColumnSpec, *, forced_not_null: bool = False) -> str:
+    """Column declaration. The comment is on the previous line so the separating comma stays live."""
+    null_sql = " NOT NULL" if (forced_not_null or not col.nullable) else ""
+    declaration = f"    {quote_ident(col.name)} {col.pg_type}{null_sql}"
+    if not col.comment:
+        return declaration
+    note = " ".join(col.comment.split())
+    return f"    -- {note}\n{declaration}"
+
+
 def render_create_table(spec: TableSpec) -> str:
-    column_sql = [f"    {quote_ident(col.name)} {col.pg_type}" for col in spec.columns]
-    pk = ", ".join(quote_ident(name) for name in spec.primary_key)
-    column_sql.append(f"    PRIMARY KEY ({pk})")
+    pk = set(spec.primary_key)
+    column_sql = [_column_ddl(col, forced_not_null=col.name in pk) for col in spec.columns]
+    pk_cols = ", ".join(quote_ident(name) for name in spec.primary_key)
+    if spec.primary_key_name:
+        column_sql.append(
+            f"    CONSTRAINT {quote_ident(spec.primary_key_name)} PRIMARY KEY ({pk_cols})"
+        )
+    else:
+        column_sql.append(f"    PRIMARY KEY ({pk_cols})")
     body = ",\n".join(column_sql)
     return f"CREATE TABLE IF NOT EXISTS {quote_ident(spec.name)} (\n{body}\n);"
 
@@ -239,14 +572,26 @@ def render_add_columns(spec: TableSpec) -> List[str]:
 def render_ddl(specs: Optional[Sequence[TableSpec]] = None) -> str:
     chosen = list(specs) if specs is not None else etl_write_targets()
     parts = [
-        "-- Neon tables for the Beachwood ETL.",
-        "-- Column names match the Dataverse logical names the transformers already emit.",
-        "-- Apply with a direct (non-pooler) DATABASE_URL, or let the loader create them.",
+        "-- Neon Postgres 18 schema for project beachwood-integration (aws-us-west-2).",
+        "-- Generated by: python -m modules.neon_sink --print-ddl",
+        "-- Checked in as sql/neon_schema.sql. This statement list is not executed by the ETL.",
+        "-- Apply it with a direct (non-pooler) connection when the role should not create tables at load time.",
+        "--",
+        "-- Approximation rules:",
+        "-- * Table names are Dataverse entity-set names. GUID primary keys, owner, statecode,",
+        "--   statuscode, and audit columns are omitted because the ETL does not write them.",
+        "-- * The Dataverse alternate key is the primary key. That is the ON CONFLICT target.",
+        "--   No other Dataverse indexes are declared in this repo, so none are created.",
+        "-- * Dataverse Decimal precision is the scale. Precision 2 with range ±100000000000",
+        "--   is numeric(14,2). These columns are Decimal, not Money.",
+        "-- * Dataverse Whole Number is integer (32-bit).",
+        "-- * DateOnly is date. DateAndTime is timestamptz.",
         "",
     ]
     for spec in chosen:
+        if spec.comment:
+            parts.append(f"-- {spec.name}: {spec.comment}")
         parts.append(render_create_table(spec))
-        parts.extend(render_add_columns(spec))
         parts.append("")
     return "\n".join(parts).rstrip() + "\n"
 
@@ -258,21 +603,22 @@ def coerce_value(value: Any, pg_type: str) -> Any:
     if isinstance(value, str) and value.strip() == "":
         return None
 
-    if pg_type == "text":
+    kind = value_kind(pg_type)
+    if kind == "text":
         return str(value)
 
-    if pg_type == "bigint":
+    if kind == "int":
         return int(value)
 
-    if pg_type == "numeric":
+    if kind == "numeric":
         return Decimal(str(value))
 
-    if pg_type == "boolean":
+    if kind == "boolean":
         if isinstance(value, bool):
             return value
         return str(value).strip().lower() in {"1", "true", "yes", "t"}
 
-    if pg_type == "date":
+    if kind == "date":
         if isinstance(value, datetime):
             return value.date()
         if isinstance(value, date):
@@ -280,7 +626,7 @@ def coerce_value(value: Any, pg_type: str) -> Any:
         parsed = dt_parser.parse(str(value))
         return parsed.date()
 
-    if pg_type == "timestamptz":
+    if kind == "timestamptz":
         if isinstance(value, datetime):
             parsed_dt = value
         else:

@@ -18,6 +18,7 @@ from modules.neon_sink import (
     etl_write_targets,
     quote_ident,
     render_create_table,
+    render_ddl,
     spec_from_mapping,
     upsert_records,
 )
@@ -73,14 +74,18 @@ class SchemaTests(unittest.TestCase):
         self.assertEqual(spec.name, "crf63_oarsbidatas")
         self.assertEqual(spec.primary_key, ("crf63_businesskey",))
         types = {col.name: col.pg_type for col in spec.columns}
-        self.assertEqual(types["crf63_storenumber"], "text")
+        self.assertEqual(types["crf63_storenumber"], "varchar(20)")
         self.assertEqual(types["crf63_calendardate"], "date")
-        self.assertEqual(types["crf63_tynetsales"], "numeric")
-        self.assertEqual(types["crf63_storedays"], "bigint")
+        self.assertEqual(types["crf63_tynetsales"], "numeric(14,2)")
+        self.assertEqual(types["crf63_storedays"], "integer")
         self.assertEqual(types["crf63_lastrefreshed"], "timestamptz")
+        self.assertFalse(spec.column("crf63_businesskey").nullable)
+        self.assertFalse(spec.column("crf63_calendardate").nullable)
+        self.assertTrue(spec.column("crf63_tynetsales").nullable)
         ddl = render_create_table(spec)
-        self.assertIn('PRIMARY KEY ("crf63_businesskey")', ddl)
-        self.assertIn('"crf63_tynetsales" numeric', ddl)
+        self.assertIn('CONSTRAINT "crf63_businesskey_key" PRIMARY KEY ("crf63_businesskey")', ddl)
+        self.assertIn('"crf63_tynetsales" numeric(14,2)', ddl)
+        self.assertIn("Dataverse Decimal precision 2", ddl)
 
     def test_etl_targets_cover_every_write_table(self):
         names = [spec.name for spec in etl_write_targets()]
@@ -96,6 +101,20 @@ class SchemaTests(unittest.TestCase):
                 "crf63_bwsalesforecasts",
             ],
         )
+        by_name = {spec.name: spec for spec in etl_write_targets()}
+        self.assertNotIn("crf63_datasource", {col.name for col in by_name["crf63_saleschanneldailies"].columns})
+        for spec in etl_write_targets():
+            if spec.name == "crf63_bwsalesforecasts":
+                self.assertTrue(any("not in the repo" in col.comment for col in spec.columns))
+                continue
+            for col in spec.columns:
+                self.assertNotIn("were not found in the repo", col.comment)
+
+    def test_checked_in_ddl_matches_generator(self):
+        from pathlib import Path
+
+        path = Path(__file__).resolve().parents[1] / "sql" / "neon_schema.sql"
+        self.assertEqual(path.read_text(encoding="utf-8"), render_ddl())
 
     def test_upsert_sql_preserves_nulls_and_uses_conflict_target(self):
         sql = build_upsert_sql(LABOR_TIMES)

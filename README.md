@@ -56,7 +56,7 @@ NewIntegration/
    - A dedicated Neon project is created separately. This repo does not contain its id or password.
    - Set `DATABASE_URL` to a direct connection string. `sslmode=require` is applied when the URL does not already require SSL.
    - Placeholder: `postgresql://<role>:<password>@<endpoint>.<region>.aws.neon.tech/<database>?sslmode=require`
-   - The loader creates the destination tables on first write (`python -m modules.neon_sink --print-ddl` prints the DDL). The Neon role needs permission to create tables, or a human can apply that DDL first.
+   - The loader creates the destination tables on first write. The same DDL is checked in at `sql/neon_schema.sql` (`python -m modules.neon_sink --print-ddl`). Apply that file with a direct connection, or let the loader create the tables.
 
 ## Quick Start
 
