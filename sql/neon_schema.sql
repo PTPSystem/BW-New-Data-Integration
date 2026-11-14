@@ -121,7 +121,7 @@ CREATE TABLE IF NOT EXISTS "crf63_oarsbidatas" (
     "crf63_datasource" varchar(50),
     -- Dataverse DateAndTime. Stored as timestamptz because DateTimeBehavior is not set on this column in the create script.
     "crf63_lastrefreshed" timestamptz,
-    CONSTRAINT "crf63_businesskey_key" PRIMARY KEY ("crf63_businesskey")
+    CONSTRAINT "crf63_oarsbidatas_pkey" PRIMARY KEY ("crf63_businesskey")
 );
 
 -- crf63_saleschanneldailies: Entity set for logical table crf63_saleschanneldaily.
@@ -152,7 +152,7 @@ CREATE TABLE IF NOT EXISTS "crf63_saleschanneldailies" (
     "crf63_name" varchar(200),
     -- Dataverse DateAndTime. Stored as timestamptz because DateTimeBehavior is not set on this column in the create script.
     "crf63_lastrefreshed" timestamptz,
-    CONSTRAINT "crf63_saleschanneldaily_businesskey_key" PRIMARY KEY ("crf63_businesskey")
+    CONSTRAINT "crf63_saleschanneldailies_pkey" PRIMARY KEY ("crf63_businesskey")
 );
 
 -- crf63_offerses: Entity set for the Offers table.
@@ -187,7 +187,7 @@ CREATE TABLE IF NOT EXISTS "crf63_offerses" (
     "crf63_name" varchar(200),
     -- Dataverse DateAndTime. Stored as timestamptz because DateTimeBehavior is not set on this column in the create script.
     "crf63_lastrefreshed" timestamptz,
-    CONSTRAINT "crf63_offers_key" PRIMARY KEY ("crf63_businesskey")
+    CONSTRAINT "crf63_offerses_pkey" PRIMARY KEY ("crf63_businesskey")
 );
 
 -- crf63_inventories: Entity set for logical table crf63_inventory.
@@ -208,7 +208,7 @@ CREATE TABLE IF NOT EXISTS "crf63_inventories" (
     "crf63_name" varchar(200),
     -- Dataverse DateAndTime. Stored as timestamptz because DateTimeBehavior is not set on this column in the create script.
     "crf63_lastrefreshed" timestamptz,
-    CONSTRAINT "crf63_businesskey_key" PRIMARY KEY ("crf63_businesskey")
+    CONSTRAINT "crf63_inventories_pkey" PRIMARY KEY ("crf63_businesskey")
 );
 
 -- crf63_bw_clockinouts: Entity set for logical table crf63_bw_clockinout.
@@ -245,7 +245,7 @@ CREATE TABLE IF NOT EXISTS "crf63_bw_clockinouts" (
     "crf63_datasource" varchar(100),
     -- Dataverse DateAndTime. Stored as timestamptz because DateTimeBehavior is not set on this column in the create script.
     "crf63_lastrefreshed" timestamptz,
-    CONSTRAINT "crf63_businesskey_key" PRIMARY KEY ("crf63_businesskey")
+    CONSTRAINT "crf63_bw_clockinouts_pkey" PRIMARY KEY ("crf63_businesskey")
 );
 
 -- crf63_labortimes: Entity set for logical table crf63_labortime.
@@ -270,10 +270,10 @@ CREATE TABLE IF NOT EXISTS "crf63_labortimes" (
     "crf63_lastrefreshed" timestamptz,
     -- Dataverse String(100).
     "crf63_datasource" varchar(100),
-    CONSTRAINT "crf63_businesskey_key" PRIMARY KEY ("crf63_businesskey")
+    CONSTRAINT "crf63_labortimes_pkey" PRIMARY KEY ("crf63_businesskey")
 );
 
--- crf63_bwsalesforecasts: No create script in the repo. The composite key is the one the Dataverse PATCH used: daypart, dow, fiscal week, store. The alternate-key schema name is not in the repo.
+-- crf63_bwsalesforecasts: No create script in the repo. The composite key is the one the Dataverse PATCH used: daypart, dow, fiscal week, store. The Dataverse alternate-key schema name is not in the repo. The Postgres constraint is crf63_bwsalesforecasts_pkey so it does not collide with other tables.
 CREATE TABLE IF NOT EXISTS "crf63_bwsalesforecasts" (
     -- Dataverse attribute metadata for this column is not in the repo. Treated as an unbounded string. NOT NULL because it is part of the alternate key.
     "crf63_forecasteddaypart" text NOT NULL,
@@ -289,5 +289,5 @@ CREATE TABLE IF NOT EXISTS "crf63_bwsalesforecasts" (
     "crf63_dateofforecast" date,
     -- Dataverse attribute metadata for this column is not in the repo. The old read filtered crf63_overwrite eq true, so this is a Two Options column. Nullable because some environments may omit it.
     "crf63_overwrite" boolean,
-    PRIMARY KEY ("crf63_forecasteddaypart", "crf63_forecasteddow", "crf63_forecastedfiscalweek", "crf63_forecastedstore")
+    CONSTRAINT "crf63_bwsalesforecasts_pkey" PRIMARY KEY ("crf63_forecasteddaypart", "crf63_forecasteddow", "crf63_forecastedfiscalweek", "crf63_forecastedstore")
 );

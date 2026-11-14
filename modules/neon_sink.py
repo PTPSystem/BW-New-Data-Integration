@@ -353,38 +353,28 @@ def _column_catalog() -> Dict[Tuple[str, str], ColumnSpec]:
     return {(table, col.name): col for table, col in columns}
 
 
-def _table_notes() -> Dict[str, Tuple[str, str]]:
-    """Table comment and Dataverse alternate-key schema name, when the repo names it."""
+def _table_notes() -> Dict[str, str]:
+    """Table comment. Postgres PK names are ``<table>_pkey``, not the Dataverse key name."""
     return {
-        "crf63_oarsbidatas": (
-            "Entity set for logical table crf63_oarsbidata.",
-            "crf63_businesskey_key",
-        ),
-        "crf63_saleschanneldailies": (
-            "Entity set for logical table crf63_saleschanneldaily.",
-            "crf63_saleschanneldaily_businesskey_key",
-        ),
-        "crf63_offerses": (
-            "Entity set for the Offers table.",
-            "crf63_offers_key",
-        ),
-        "crf63_inventories": (
-            "Entity set for logical table crf63_inventory.",
-            "crf63_businesskey_key",
-        ),
-        "crf63_bw_clockinouts": (
-            "Entity set for logical table crf63_bw_clockinout.",
-            "crf63_businesskey_key",
-        ),
-        "crf63_labortimes": (
-            "Entity set for logical table crf63_labortime.",
-            "crf63_businesskey_key",
-        ),
+        "crf63_oarsbidatas": "Entity set for logical table crf63_oarsbidata.",
+        "crf63_saleschanneldailies": "Entity set for logical table crf63_saleschanneldaily.",
+        "crf63_offerses": "Entity set for the Offers table.",
+        "crf63_inventories": "Entity set for logical table crf63_inventory.",
+        "crf63_bw_clockinouts": "Entity set for logical table crf63_bw_clockinout.",
+        "crf63_labortimes": "Entity set for logical table crf63_labortime.",
         "crf63_bwsalesforecasts": (
-            "No create script in the repo. The composite key is the one the Dataverse PATCH used: daypart, dow, fiscal week, store. The alternate-key schema name is not in the repo.",
-            "",
+            "No create script in the repo. The composite key is the one the Dataverse PATCH used: "
+            "daypart, dow, fiscal week, store. The Dataverse alternate-key schema name is not in the repo. "
+            "The Postgres constraint is crf63_bwsalesforecasts_pkey so it does not collide with other tables."
         ),
     }
+
+
+def _pk_constraint_name(table: str) -> str:
+    """Schema-unique primary key name. Dataverse reuses crf63_businesskey_key on several tables."""
+    name = f"{table}_pkey"
+    quote_ident(name)
+    return name
 
 
 def spec_from_mapping(mapping: Mapping[str, Any]) -> TableSpec:
@@ -402,7 +392,7 @@ def spec_from_mapping(mapping: Mapping[str, Any]) -> TableSpec:
     seen = set()
 
     catalog = _column_catalog()
-    notes, pk_constraint = _table_notes().get(table, ("", ""))
+    notes = _table_notes().get(table, "")
 
     def add(name: Any, fallback_type: str) -> None:
         if name is None:
@@ -442,7 +432,7 @@ def spec_from_mapping(mapping: Mapping[str, Any]) -> TableSpec:
         columns=tuple(columns),
         primary_key=(pk_name,),
         comment=notes,
-        primary_key_name=pk_constraint,
+        primary_key_name=_pk_constraint_name(table),
     )
 
 
@@ -466,14 +456,14 @@ def _spec_from_catalog(
     optional_columns: Sequence[str] = (),
 ) -> TableSpec:
     catalog = _column_catalog()
-    notes, pk_constraint = _table_notes()[name]
+    notes = _table_notes()[name]
     return TableSpec(
         name=name,
         columns=tuple(catalog[(name, column)] for column in column_names),
         primary_key=tuple(primary_key),
         optional_columns=tuple(optional_columns),
         comment=notes,
-        primary_key_name=pk_constraint,
+        primary_key_name=_pk_constraint_name(name),
     )
 
 

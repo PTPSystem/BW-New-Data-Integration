@@ -83,7 +83,8 @@ class SchemaTests(unittest.TestCase):
         self.assertFalse(spec.column("crf63_calendardate").nullable)
         self.assertTrue(spec.column("crf63_tynetsales").nullable)
         ddl = render_create_table(spec)
-        self.assertIn('CONSTRAINT "crf63_businesskey_key" PRIMARY KEY ("crf63_businesskey")', ddl)
+        self.assertIn('CONSTRAINT "crf63_oarsbidatas_pkey" PRIMARY KEY ("crf63_businesskey")', ddl)
+        self.assertEqual(spec.primary_key_name, "crf63_oarsbidatas_pkey")
         self.assertIn('"crf63_tynetsales" numeric(14,2)', ddl)
         self.assertIn("Dataverse Decimal precision 2", ddl)
 
@@ -103,6 +104,10 @@ class SchemaTests(unittest.TestCase):
         )
         by_name = {spec.name: spec for spec in etl_write_targets()}
         self.assertNotIn("crf63_datasource", {col.name for col in by_name["crf63_saleschanneldailies"].columns})
+        pk_names = [spec.primary_key_name for spec in by_name.values()]
+        self.assertEqual(len(pk_names), len(set(pk_names)))
+        for spec in by_name.values():
+            self.assertEqual(spec.primary_key_name, f"{spec.name}_pkey")
         for spec in etl_write_targets():
             if spec.name == "crf63_bwsalesforecasts":
                 self.assertTrue(any("not in the repo" in col.comment for col in spec.columns))
