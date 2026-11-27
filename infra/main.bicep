@@ -23,8 +23,8 @@ param location string = resourceGroup().location
 @description('Docker image tag to deploy. Set to a specific git SHA by GitHub Actions.')
 param imageTag string = 'latest'
 
-@description('Cron schedule (UTC). Default: 6:00 AM and 6:00 PM UTC every day.')
-param cronSchedule string = '0 6,18 * * *'
+@description('Cron schedule (UTC) for job-bw-data-integration. 7:00 AM and 6:00 PM UTC (1:00 AM and noon CST).')
+param cronSchedule string = '0 7,18 * * *'
 
 // ---------------------------------------------------------------------------
 // Variables

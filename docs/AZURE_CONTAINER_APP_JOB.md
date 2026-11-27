@@ -206,11 +206,11 @@ Once you've confirmed **at least two scheduled runs** completed successfully on 
 
 ## Changing the Schedule
 
-Edit [infra/main.bicepparam](../infra/main.bicepparam) and update `cronSchedule`. Then push to `main` — the workflow redeploys automatically.
+Edit [infra/main.bicepparam](../infra/main.bicepparam) and update `cronSchedule`. Then push to `main` — the workflow redeploys automatically. The live schedule is `0 7,18 * * *` (7:00 AM and 6:00 PM UTC, which is 1:00 AM and noon CST). The 7:00 UTC run is after stores close. Forecast job crons are separate and are not this parameter.
 
 ```bicepparam
-// 8:00 AM and 8:00 PM Central Standard Time (UTC-6) = 2:00 PM and 2:00 AM UTC
-param cronSchedule = '0 14,2 * * *'
+// 7:00 AM and 6:00 PM UTC = 1:00 AM and noon CST (UTC-6)
+param cronSchedule = '0 7,18 * * *'
 ```
 
 Or manually:
@@ -219,7 +219,7 @@ Or manually:
 az containerapp job update \
   --name job-bw-data-integration \
   --resource-group rg-bw-data-integration \
-  --cron-expression '0 14,2 * * *'
+  --cron-expression '0 7,18 * * *'
 ```
 
 ---
