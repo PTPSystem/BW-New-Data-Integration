@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from string import Formatter
 from typing import Any, Dict, List, Optional
 
 import pandas as pd
@@ -101,8 +102,41 @@ def run_mdx_to_df(
     return df
 
 
+def _is_scalar_na(value: Any) -> bool:
+    """True for None, NaN, pd.NA, and NaT. Non-scalars are not treated as NA."""
+    if value is None:
+        return True
+    try:
+        result = pd.isna(value)
+    except (TypeError, ValueError):
+        return False
+    if getattr(result, "shape", None) not in (None, ()):
+        return False
+    return bool(result)
+
+
+def _missing_business_key_value(value: Any) -> bool:
+    """Null or blank values cannot form a stable alternate key."""
+    if _is_scalar_na(value):
+        return True
+    if isinstance(value, str) and value.strip() == "":
+        return True
+    return False
+
+
+def _business_key_field_names(fmt: str) -> List[str]:
+    names: List[str] = []
+    for _, field_name, _, _ in Formatter().parse(fmt):
+        if not field_name:
+            continue
+        base = field_name.split(".", 1)[0].split("[", 1)[0]
+        if base and base not in names:
+            names.append(base)
+    return names
+
+
 def _coerce(value: Any, typ: str):
-    if value is None or (isinstance(value, float) and pd.isna(value)):
+    if _is_scalar_na(value):
         return None
 
     if typ == "string":
@@ -170,6 +204,7 @@ def transform_df_to_records(
     df: pd.DataFrame,
     mapping: Dict[str, Any],
     logger=None,
+    stats: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
     table = mapping.get("table")
     if not table:
@@ -181,6 +216,7 @@ def transform_df_to_records(
     bk_format = bk.get("format")
     if not bk_format:
         raise ValueError("Mapping missing business_key.format")
+    bk_fields = _business_key_field_names(bk_format)
 
     def log(msg: str):
         if logger:
@@ -190,12 +226,22 @@ def transform_df_to_records(
 
     records: List[Dict[str, Any]] = []
     now_iso = datetime.now().isoformat()
+    # Rows with a null or blank business-key field are skipped, not given a
+    # placeholder. A synthetic token such as "NONE" would mint a new alternate
+    # key, collapse distinct source rows onto one record, and orphan that row
+    # if a real code arrives later. Complete rows keep the key they already have.
+    skipped_missing_key = 0
+    max_skip_logs = 5
 
     for _, row in df.iterrows():
-        # Skip aggregate rows where any dimension value is 'All'
+        # Skip aggregate rows where any dimension value is 'All'.
+        # Compare only real scalars: pd.NA == 'All' raises TypeError.
         skip_row = False
         for src in fields.keys():
-            if row.get(src) == 'All':
+            raw = row.get(src)
+            if _is_scalar_na(raw):
+                continue
+            if raw == 'All':
                 skip_row = True
                 break
         if skip_row:
@@ -245,7 +291,29 @@ def transform_df_to_records(
                 except Exception:
                     pass
 
-        business_key = bk_format.format(**template_values)
+        missing = [
+            name for name in bk_fields
+            if _missing_business_key_value(template_values.get(name))
+        ]
+        if missing:
+            skipped_missing_key += 1
+            if skipped_missing_key <= max_skip_logs:
+                log(
+                    "⚠️  Skipping row missing business-key field(s) "
+                    f"{', '.join(missing)} ({_business_key_snapshot(bk_fields, template_values, template_raw_values)})"
+                )
+            continue
+
+        try:
+            business_key = bk_format.format(**template_values)
+        except (KeyError, ValueError, IndexError) as exc:
+            skipped_missing_key += 1
+            if skipped_missing_key <= max_skip_logs:
+                log(
+                    "⚠️  Skipping row; business key format failed "
+                    f"({exc}): {_business_key_snapshot(bk_fields, template_values, template_raw_values)}"
+                )
+            continue
         record[mapping.get("alternate_key", "crf63_businesskey")] = business_key
 
         # Common metadata
@@ -261,5 +329,33 @@ def transform_df_to_records(
         if record.get(mapping.get("alternate_key", "crf63_businesskey")):
             records.append(record)
 
+    if skipped_missing_key:
+        log(
+            f"⚠️  Skipped {skipped_missing_key} row(s) with a null or blank business-key "
+            f"field for {table}. Those rows were not upserted; keys for complete rows are unchanged."
+        )
+    if stats is not None:
+        stats["skipped_missing_key"] = skipped_missing_key
     log(f"✓ Transformed {len(records)} records for {table}")
     return records
+
+
+def _business_key_snapshot(
+    fields: List[str],
+    template_values: Dict[str, Any],
+    template_raw_values: Dict[str, Any],
+) -> str:
+    parts: List[str] = []
+    for name in fields:
+        raw = template_raw_values.get(name)
+        if isinstance(raw, str) and raw.strip() == "":
+            parts.append(f"{name}=<blank>")
+            continue
+        if _missing_business_key_value(template_values.get(name)):
+            parts.append(f"{name}=<null>")
+            continue
+        shown = template_values.get(name)
+        if hasattr(shown, "strftime"):
+            shown = shown.strftime("%Y-%m-%d")
+        parts.append(f"{name}={shown}")
+    return ", ".join(parts)

@@ -196,6 +196,171 @@ def query_olap_and_sync_to_dataverse(config=None, logger=None, query_type='full_
         "errors": errors
     }
 
+
+def outcome_for_transformed_rows(records, created, updated, errors, skipped_missing_key):
+    """Build a pipeline result after transformation.
+
+    A few unkeyed rows are dropped and the pipeline still succeeds. If every
+    source row was unkeyed, nothing was written, so the pipeline fails and the
+    job stays visible as a failure.
+    """
+    skipped = int(skipped_missing_key or 0)
+    result = {
+        "records_created": created,
+        "records_updated": updated,
+        "errors": errors,
+        "rows_skipped_missing_key": skipped,
+    }
+    if skipped and not records:
+        result["success"] = False
+        result["error"] = (
+            f"All {skipped} source rows were skipped because a business-key field "
+            "was null or blank"
+        )
+        return result
+    result["success"] = True
+    return result
+
+
+def run_pipelines_isolated(pipeline_names, run_one):
+    """Run each pipeline and keep going when one fails.
+
+    ``run_one(name)`` returns a result dict. An ``Exception`` or ``SystemExit``
+    from one pipeline is recorded and the remaining names still run. The
+    aggregate ``success`` flag is false when any pipeline failed.
+    """
+    results = []
+    for pipeline_name in pipeline_names:
+        print("=" * 80)
+        print(f"Syncing {pipeline_name}...")
+        print("=" * 80)
+        try:
+            outcome = run_one(pipeline_name)
+        except (Exception, SystemExit) as exc:
+            print(f"\n✗ Pipeline {pipeline_name} failed: {exc}")
+            traceback.print_exc()
+            outcome = {
+                "success": False,
+                "error": f"{type(exc).__name__}: {exc}",
+                "traceback": traceback.format_exc(),
+                "records_created": 0,
+                "records_updated": 0,
+                "errors": 0,
+                "rows_skipped_missing_key": 0,
+            }
+        if not isinstance(outcome, dict):
+            outcome = {
+                "success": False,
+                "error": f"Unexpected result type {type(outcome).__name__}",
+                "records_created": 0,
+                "records_updated": 0,
+                "errors": 0,
+                "rows_skipped_missing_key": 0,
+            }
+        outcome.setdefault("records_created", 0)
+        outcome.setdefault("records_updated", 0)
+        outcome.setdefault("errors", 0)
+        outcome.setdefault("rows_skipped_missing_key", 0)
+        outcome.setdefault("success", False)
+        results.append((pipeline_name, outcome))
+
+    def _n(outcome, key):
+        try:
+            return int(outcome.get(key) or 0)
+        except (TypeError, ValueError):
+            return 0
+
+    failed = [(name, outcome) for name, outcome in results if not outcome.get("success")]
+    lines = []
+    for name, outcome in results:
+        status = "ok" if outcome.get("success") else "FAILED"
+        line = (
+            f"- {name}: {status}; "
+            f"created {_n(outcome, 'records_created')}, "
+            f"updated {_n(outcome, 'records_updated')}, "
+            f"errors {_n(outcome, 'errors')}, "
+            f"skipped_missing_key {_n(outcome, 'rows_skipped_missing_key')}"
+        )
+        if not outcome.get("success"):
+            line += f"; error: {outcome.get('error', 'failed')}"
+        lines.append(line)
+
+    return {
+        "success": not failed,
+        "records_created": sum(_n(outcome, "records_created") for _, outcome in results),
+        "records_updated": sum(_n(outcome, "records_updated") for _, outcome in results),
+        "errors": sum(_n(outcome, "errors") for _, outcome in results),
+        "rows_skipped_missing_key": sum(
+            _n(outcome, "rows_skipped_missing_key") for _, outcome in results
+        ),
+        "error": "\n".join(
+            f"{name}: {outcome.get('error', 'failed')}" for name, outcome in failed
+        ) or None,
+        "summary": "\n".join(lines),
+        "details": results,
+    }
+
+
+def _sync_email(args, result):
+    """Subject and body for the sync notification. Failure includes every pipeline."""
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    summary = result.get("summary")
+    if not summary:
+        summary = "\n".join([
+            f"- Query: {args.query}",
+            f"- Length: {args.length}",
+            f"- Records Created: {result.get('records_created', 0)}",
+            f"- Records Updated: {result.get('records_updated', 0)}",
+            f"- Errors: {result.get('errors', 0)}",
+            f"- Rows skipped (null or blank business key): {result.get('rows_skipped_missing_key', 0)}",
+        ])
+    skipped = result.get("rows_skipped_missing_key") or 0
+    if not result.get("success"):
+        traces = []
+        for name, outcome in result.get("details") or []:
+            tb = (outcome or {}).get("traceback")
+            if tb:
+                traces.append(f"--- {name} ---\n{tb.rstrip()}")
+        trace_block = "\n\n".join(traces) if traces else (result.get("error") or "Unknown error")
+        subject = "❌ OLAP to Dataverse Sync Failed"
+        body = f"""OLAP to Dataverse sync failed.
+
+Pipelines that failed did not stop the others. Successful pipelines were still upserted.
+
+Query: {args.query}
+Length: {args.length}
+Timestamp: {ts}
+
+{summary}
+
+{trace_block}
+""".strip()
+        return subject, body
+
+    if skipped:
+        subject = (
+            "⚠️ OLAP to Dataverse Sync Completed — "
+            f"skipped {skipped} row(s) with a null business key"
+        )
+        note = (
+            f"\n\n{skipped} source row(s) were skipped because a business-key field "
+            "was null or blank. They were not written. Business keys for complete rows "
+            "are unchanged."
+        )
+    else:
+        subject = "✅ OLAP to Dataverse Sync Completed Successfully"
+        note = ""
+    body = f"""OLAP to Dataverse sync completed successfully.
+
+Summary:
+{summary}
+- Timestamp: {ts}
+
+The data has been synchronized to Dataverse.{note}
+""".strip()
+    return subject, body
+
+
 def main():
     """Main entry point - uses Azure Key Vault for credentials."""
     
@@ -385,17 +550,25 @@ def main():
                 "records_created": 0,
                 "records_updated": 0,
                 "errors": 0,
+                "rows_skipped_missing_key": 0,
             }
 
-        records = transform_df_to_records(df, mapping)
+        transform_stats = {}
+        records = transform_df_to_records(df, mapping, stats=transform_stats)
+        skipped_missing_key = int(transform_stats.get("skipped_missing_key") or 0)
         alternate_key = mapping.get('alternate_key', 'crf63_businesskey')
         created, updated, errors = upsert_to_dataverse(dataverse_url, dataverse_token, mapping['table'], records, alternate_key)
-        return {"success": True, "records_created": created, "records_updated": updated, "errors": errors}
+        return outcome_for_transformed_rows(
+            records, created, updated, errors, skipped_missing_key
+        )
 
     # If pipeline is explicitly provided, run it (advanced escape hatch).
     if args.pipeline:
         result = run_pipeline_by_name(args.pipeline, args.length, args.fy, args.fp)
-        print(f"Done: {result['records_created']} created, {result['records_updated']} updated, {result['errors']} errors")
+        print(
+            f"Done: {result['records_created']} created, {result['records_updated']} updated, "
+            f"{result['errors']} errors, {result.get('rows_skipped_missing_key', 0)} skipped missing key"
+        )
         return 0 if result.get('success') else 1
     
     send_email = (args.email == 'yes')
@@ -429,24 +602,12 @@ def main():
 
         if args.query == 'all':
             print("🔄 Syncing all pipelines...\n")
-            results = []
-            for pipeline_name in pipelines.keys():
-                print("=" * 80)
-                print(f"Syncing {pipeline_name}...")
-                print("=" * 80)
-                results.append((pipeline_name, run_pipeline_by_name(pipeline_name, args.length, args.fy, args.fp)))
-
-            total_created = sum(r[1].get('records_created', 0) for r in results)
-            total_updated = sum(r[1].get('records_updated', 0) for r in results)
-            total_errors = sum(r[1].get('errors', 0) for r in results)
-
-            result = {
-                'success': all(r[1].get('success', False) for r in results),
-                'records_created': total_created,
-                'records_updated': total_updated,
-                'errors': total_errors,
-                'details': results,
-            }
+            result = run_pipelines_isolated(
+                list(pipelines.keys()),
+                lambda pipeline_name: run_pipeline_by_name(
+                    pipeline_name, args.length, args.fy, args.fp
+                ),
+            )
         else:
             # Use pipeline name directly from --query argument
             result = run_pipeline_by_name(args.query, args.length, args.fy, args.fp)
@@ -455,34 +616,7 @@ def main():
         # Send email notification if requested
         if send_email:
             print("\n📧 Sending email notification...")
-            
-            if result["success"]:
-                subject = "✅ OLAP to Dataverse Sync Completed Successfully"
-                body = f"""
-OLAP to Dataverse sync completed successfully.
-
-Summary:
-            - Query: {args.query}
-            - Length: {args.length}
-- Records Created: {result.get('records_created', 0)}
-- Records Updated: {result.get('records_updated', 0)}
-- Errors: {result.get('errors', 0)}
-- Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-
-The data has been synchronized to Dataverse.
-                """.strip()
-            else:
-                subject = "❌ OLAP to Dataverse Sync Failed"
-                body = f"""
-OLAP to Dataverse sync failed.
-
-Error: {result.get('error', 'Unknown error')}
-Query: {args.query}
-Length: {args.length}
-Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-
-Please check the logs for more details.
-                """.strip()
+            subject, body = _sync_email(args, result)
             
             email_sent = send_email_notification(subject, body)
             if email_sent:
@@ -491,6 +625,12 @@ Please check the logs for more details.
                 print("⚠ Failed to send email notification")
         
         if result["success"]:
+            skipped = result.get("rows_skipped_missing_key") or 0
+            if skipped:
+                print(
+                    f"\n⚠️  Sync completed with {skipped} row(s) skipped "
+                    "(null or blank business key)"
+                )
             return 0
         else:
             print(f"\n✗ Sync failed: {result.get('error', 'Unknown error')}")
